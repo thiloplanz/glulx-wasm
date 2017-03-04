@@ -6,7 +6,7 @@
 
 // AST for Glulx functions
 
-import {c, N, I32, Op, FunctionBody} from '../ast'
+import {c, N, I32, Void, Op, FunctionBody} from '../ast'
 import {uint32} from '../basic-types'
 
 export interface Transcodable{
@@ -21,9 +21,18 @@ export interface LoadOperandType extends Transcodable {
     transcode(): Op<I32>
 }
 
+export interface StoreOperandType {
+    transcode(input: Op<I32>): Op<Void>
+}
+
 class Return implements Transcodable {
     constructor(private readonly v: LoadOperandType){}
     transcode() { return c.return_(this.v.transcode()) }
+}
+
+class Add implements Transcodable {
+    constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType){}
+    transcode() { return this.x.transcode(c.i32.add(this.a.transcode(),this.b.transcode())) }
 }
 
 class Constant implements LoadOperandType {
@@ -34,6 +43,11 @@ class Constant implements LoadOperandType {
 class Local32 implements LoadOperandType {
     constructor(private readonly v: uint32){}
     transcode()  { return c.get_local(c.i32, this.v)}
+}
+
+class StoreLocal32 implements StoreOperandType {
+    constructor(private readonly v: uint32){}
+    transcode(input: Op<I32>){ return c.set_local(this.v, input)}
 }
 
 export const g = {
@@ -49,5 +63,13 @@ export const g = {
         return new Local32(index/4)
     },
 
-    return_(v: LoadOperandType) : Transcodable { return new Return(v)}
+    setLocalVariable(index: uint32) : StoreOperandType { 
+        if (index % 4 != 0) throw new Error(`invalid local variable offset ${index}`)
+        return new StoreLocal32(index/4)
+    },
+
+
+    add(a:LoadOperandType, b:LoadOperandType, x:StoreOperandType) : Opcode { return new Add(a,b,x)},
+
+    return_(v: LoadOperandType) : Opcode { return new Return(v)}
 }
