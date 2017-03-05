@@ -6,7 +6,7 @@
 
 // AST for Glulx functions
 
-import {c, N, I32, Void, Op, FunctionBody} from '../ast'
+import {c, N, I32, Void, Op, FunctionBody, FuncType} from '../ast'
 import {uint32} from '../basic-types'
 
 export interface Transcodable{
@@ -24,6 +24,16 @@ export interface LoadOperandType extends Transcodable {
 export interface StoreOperandType {
     transcode(input: Op<I32>): Op<Void>
 }
+
+export class GlulxFunction { 
+    constructor(
+        readonly name: string, 
+        readonly type: FuncType, 
+        readonly opcodes: Opcode[]){}
+}
+
+export const function_type_i32_i32 = c.func_type([c.i32], c.i32)
+
 
 class Return implements Transcodable {
     constructor(private readonly v: LoadOperandType){}
@@ -50,12 +60,7 @@ class StoreLocal32 implements StoreOperandType {
     transcode(input: Op<I32>){ return c.set_local(this.v, input)}
 }
 
-export const g = {
-    
-    function_body(opcodes: Opcode[]): FunctionBody { 
-        return c.function_body([ /* additional local variables here */ ], opcodes.map(o => o.transcode())) 
-    },
-
+export const g = {    
     const_(v: uint32) : LoadOperandType { return new Constant(v)} ,
 
     localVariable(index: uint32) : LoadOperandType { 
@@ -68,8 +73,10 @@ export const g = {
         return new StoreLocal32(index/4)
     },
 
-
     add(a:LoadOperandType, b:LoadOperandType, x:StoreOperandType) : Opcode { return new Add(a,b,x)},
 
-    return_(v: LoadOperandType) : Opcode { return new Return(v)}
+    return_(v: LoadOperandType) : Opcode { return new Return(v)},
+
+    function_i32_i32(name: string, opcodes: Opcode[]): GlulxFunction {
+         return new GlulxFunction(name, function_type_i32_i32, opcodes)}
 }

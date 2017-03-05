@@ -6,60 +6,65 @@
 
 import {Test} from '../../nodeunit'
      
-import {g} from '../../../src/glulx/ast'
-import {c} from '../../../src/ast'
-import { strRepr } from '../../../src/repr'
+import {g, GlulxFunction} from '../../../src/glulx/ast'
+import {module} from '../../../src/glulx/module'
 import { BufferedEmitter} from '../../../src/emit'
 
-
 declare var WebAssembly : any
-
-const {type_section, func_type, i32, function_section,
-    varuint32, export_section, export_entry, 
-    str_ascii, external_kind, code_section, function_body,
-    get_global, get_local, call, if_
-  } = c
   
 const var0 = g.localVariable(0)
 
-const mod = c.module([
+const cases : [any] = [
+    [   // function body
+        g.function_i32_i32("return_input_plus_one", [
+            g.add(var0, g.const_(1), g.setLocalVariable(0)),
+            g.return_(g.localVariable(0)) ]),
+        // input and expected output    
+        1, 2,
+        0, 1,
+        -1, 0   
+    ],
+    [
+        g.function_i32_i32("return_constant", [
+            g.return_(g.const_(42))
+        ]),
+        99, 42
+    ]
+]
 
-  type_section([
-    func_type([i32], i32), // type index = 0
-  ]),
+let wasm: Promise<any> = (() => {
+    const mod = module(cases.map(c => c[0]))
+    const buffer = new ArrayBuffer(10000)
+    const emitter = new BufferedEmitter(buffer)
+    mod.emit(emitter)
+    return WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length))
+})()
 
-  function_section([
-    varuint32(0), // function index = 0, using type index 0
-  ]),
+export const tests:any = {}
 
-  export_section([
-    // exports "factorial" as function at index 0
-    export_entry(str_ascii("test_return_input_plus_one"), external_kind.function, varuint32(0)),
-  ]),
+function runCase(test: Test, name: string, data: any[]){
+    wasm.then(module => {
+        for(let i=1; i<data.length; i+=2){
+            let input = data[i]
+            let expected = data[i+1]
+            let result = module.instance.exports[name](input)
+            test.equals(result, expected, input + " -> "+expected+" , but got "+result)
+        }
+        test.done()
+    })
+}
 
-  code_section([
-    // body of function at index 0:
-    g.function_body([
-      g.add(var0, g.const_(1), g.setLocalVariable(0)),
-      g.return_(g.localVariable(0))
-    ])]
-  )]
-)
+cases.forEach( c => {
+    const f = c[0]
+    tests[f.name] = (test:Test) => runCase(test, f.name, c)
+})
 
+tests.compile_test_module= (test: Test) => {
+    wasm.then((module) => {
+        const exp = module.instance.exports
+        cases.forEach(c => test.ok(exp[c[0].name], "exported function "+c[0].name))
+        test.done()
+    })
 
-export const tests = {
-    return_input_plus_one(test:Test){ 
-        const buffer = new ArrayBuffer(10000)
-        const emitter = new BufferedEmitter(buffer)
-        mod.emit(emitter)
-        WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length)).then( module => {
-            const instance = module.instance
-            test.equals(instance.exports.test_return_input_plus_one(1), 2)
-            test.equals(instance.exports.test_return_input_plus_one(0), 1)
-            test.equals(instance.exports.test_return_input_plus_one(-1), 0)
-        
-            test.done()
-        }) 
-    }
 }
 
