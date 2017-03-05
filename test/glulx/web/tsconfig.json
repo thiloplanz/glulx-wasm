@@ -1,0 +1,22 @@
+{
+	"compilerOptions": {
+		"module": "amd",
+        "outDir": "build",
+        "target": "ESNEXT",
+        "noImplicitAny": false,
+        "sourceMap": true,
+        "alwaysStrict": true,
+        "forceConsistentCasingInFileNames": true,
+        "lib": [
+            "dom",
+            "es6"
+        ],
+        "noEmitOnError": true,
+        "declaration": true,
+        "pretty": true
+	},
+     "include": [
+        "*.ts",
+        "../../../src/**/*.ts"
+    ]
+}

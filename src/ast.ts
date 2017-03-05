@@ -883,7 +883,8 @@ class f64ops extends type_atom implements F64ops { readonly _F64: undefined;
 }
 
 const magic = uint32(0x6d736100)
-const version = uint32(0xd)
+// temporarily changing this to MVPv1 to make it work in Chrome Canary, see https://github.com/rsms/wasm-util/issues/2
+const version = uint32(1)
 const end = new instr_atom(0x0b, Void) as any as Op<Void>
 const elseOp = new instr_atom(0x05, Void) as any as Op<Void>
 

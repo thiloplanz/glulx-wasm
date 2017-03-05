@@ -8,3 +8,5 @@ build
 wasm-spec
 node_modules
 _local
+node-v6.10.0-darwin-x64
+node_modules
