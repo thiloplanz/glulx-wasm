@@ -14,7 +14,7 @@ export interface Transcodable {
 }
 
 export interface Opcode extends Transcodable {
-
+    
 }
 
 export interface LoadOperandType extends Transcodable {
@@ -29,15 +29,16 @@ export class GlulxFunction {
     constructor(
         readonly name: string,
         readonly type: FuncType,
+        readonly stackCalled: Boolean,
         readonly opcodes: Opcode[]) { }
 }
 
-export const function_type_i32_i32 = c.func_type([c.i32], c.i32)
+export const function_type_i32     = c.func_type([c.i32], c.i32)
+
+export const function_type_no_args = c.func_type([], c.i32) 
 
 
-
-
-class Return implements Transcodable {
+export class Return implements Transcodable {
     constructor(private readonly v: LoadOperandType) { }
     transcode() { return c.return_(this.v.transcode()) }
 }
@@ -47,8 +48,8 @@ class Add implements Transcodable {
     transcode() { return this.x.transcode(c.i32.add(this.a.transcode(), this.b.transcode())) }
 }
 
-class Constant implements LoadOperandType {
-    constructor(private readonly v: uint32) { }
+export class Constant implements LoadOperandType {
+    constructor(readonly v: uint32) { }
     transcode() { return c.i32.const(this.v) }
 }
 
@@ -70,7 +71,7 @@ const discard : StoreOperandType = new Discard
 
 
 export const g = {
-    const_(v: uint32): LoadOperandType { return new Constant(v) },
+    const_(v: uint32): Constant { return new Constant(v) },
 
     discard: discard,
 
@@ -89,6 +90,6 @@ export const g = {
     return_(v: LoadOperandType): Opcode { return new Return(v) },
 
     function_i32_i32(name: string, opcodes: Opcode[]): GlulxFunction {
-        return new GlulxFunction(name, function_type_i32_i32, opcodes)
+        return new GlulxFunction(name, function_type_i32, false, opcodes)
     }
 }

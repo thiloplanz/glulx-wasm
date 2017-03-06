@@ -9,7 +9,7 @@ import { Test } from '../../nodeunit'
 import { g, GlulxFunction } from '../../../src/glulx/ast'
 import { module } from '../../../src/glulx/module'
 import { BufferedEmitter } from '../../../src/emit'
-import { decodeOpcode } from '../../../src/glulx/decoder'
+import { decodeOpcode, decodeFunction } from '../../../src/glulx/decoder'
 
 declare var WebAssembly: any
 
@@ -35,12 +35,22 @@ const cases:　any[] = [
 
 const glulxercise_cases : any[][] = [
         [
-            "__0x0012f7__add_03_fc_Fr00",
-            glulxercise => g.function_i32_i32("dummy", [
+            "_0x000012f7__add_03_fc_Fr00",
+            glulxercise => g.function_i32_i32(null, [
                 decodeOpcode(glulxercise, 0x00012f7).v,  // add  03 fc Fr:00
                 g.return_(var0)
             ]),
             88, 0xff,
+        ],
+        [
+            "_0x0000707c__return false",
+            gluxercise => decodeFunction(gluxercise, 0x707c).v,
+            [], 0
+        ],
+        [
+            "_0x00007084__return true",
+            gluxercise => decodeFunction(gluxercise, 0x7084).v,
+            [], 1
         ]
 ]
 
@@ -88,7 +98,7 @@ function runCase(test: Test, name: string, data: any[]) {
             let input = data[i]
             let expected = data[i + 1]
             let result = module.instance.exports[name](input)
-            test.equals(result, expected, input + " -> " + expected + " , but got " + result)
+            test.equals(result, expected, input + " -> " + expected + ", got " + result)
         }
         test.done()
     })
