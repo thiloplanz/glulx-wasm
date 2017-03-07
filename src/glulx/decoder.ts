@@ -6,8 +6,11 @@
 
 // Decode Glulx game images to AST
 
-import { g, LoadOperandType, StoreOperandType, Opcode, 
-    Constant, GlulxFunction, Return, function_type_no_args } from './ast'
+import {
+    g, LoadOperandType, StoreOperandType, Opcode,
+    Constant, GlulxFunction, Return, function_type_no_args,
+    function_type_i32
+} from './ast'
 
 export class ParseResult<T>{
     constructor(readonly v: T, readonly nextOffset: number) { }
@@ -16,29 +19,52 @@ export class ParseResult<T>{
 
 const const_zero = g.const_(0)
 
-function decodeFunctionSignature_in_in_out(image: Uint8Array, offset: number) {
-    let a, b: LoadOperandType
-    let x: StoreOperandType
-    let length = 2
-    const sig1 = image[offset]
-    const sig2 = image[offset+1]
-    switch (sig1) {
-        case 0x00:  a = b = const_zero; break;
-        case 0x11:  
-            length += 2
-            a = g.const_(image[offset+2])
-            b = g.const_(image[offset+3])
-            break
-        default: throw new Error("unsupported parameter signature "+sig1)
+function uint16(image: Uint8Array, offset: number) {
+    return image[offset] * 256 + image[offset + 1]
+}
+
+function uint32(image: Uint8Array, offset: number) {
+    return image[offset] * 0x1000000 + image[offset + 1] * 0x10000 + image[offset + 2] * 0x100 + image[offset + 3]
+}
+
+function decodeLoadOperand(code: number, image: Uint8Array, offset: number) {
+    // TODO: opcode rule about address decoding format
+    switch (code) {
+        case 0x00: return new ParseResult(const_zero, offset)
+        case 0x01: return new ParseResult(g.const_(image[offset]), offset + 1)
+        case 0x02: return new ParseResult(g.const_(uint16(image, offset)), offset + 2)
+        case 0x03: return new ParseResult(g.const_(uint32(image, offset)), offset + 4)
+        case 0x05: return new ParseResult(g.memory(image[offset]), offset + 1)
+        case 0x06: return new ParseResult(g.memory(uint16(image, offset)), offset + 2)
+        case 0x07: return new ParseResult(g.memory(uint32(image, offset)), offset + 4)
+        case 0x08: return new ParseResult(g.pop, offset)
+        case 0x09: return new ParseResult(g.localVariable(image[offset]), offset + 1)
+        case 0x0A: return new ParseResult(g.localVariable(uint16(image, offset)), offset + 2)
+        case 0x0B: return new ParseResult(g.localVariable(uint32(image, offset)), offset + 4)
+        case 0x0D: return new ParseResult(g.ram(image[offset]), offset + 1)
+        case 0x0E: return new ParseResult(g.ram(uint16(image, offset)), offset + 2)
+        case 0x0F: return new ParseResult(g.ram(uint32(image, offset)), offset + 4)
+        default: throw new Error("unsupported load operand type " + code)
     }
+}
+
+function decodeFunctionSignature_in_in_out(image: Uint8Array, offset: number) {
+    const sig1 = image[offset]
+    const sig2 = image[offset + 1]
+    offset += 2
+    let a = decodeLoadOperand(0x0F & sig1, image, offset)
+    offset = a.nextOffset
+    let b = decodeLoadOperand(sig1 >>> 4, image, offset)
+    offset = b.nextOffset
+    let x
     switch (sig2) {
         case 0x00: x = g.discard; break;
-        case 0x09: x = g.setLocalVariable(image[offset+length]); length++; break;
-        default: throw new Error("unsupported return signature "+sig2)
+        case 0x09: x = g.setLocalVariable(image[offset + length]); length++; break;
+        default: throw new Error("unsupported return signature " + sig2)
     }
     return {
-        a: a,
-        b: b,
+        a: a.v,
+        b: b.v,
         x: x,
         nextOffset: offset + length
     }
@@ -46,34 +72,26 @@ function decodeFunctionSignature_in_in_out(image: Uint8Array, offset: number) {
 
 function decodeFunctionSignature_in(image: Uint8Array, offset: number) {
     const sig = image[offset]
-    let a : LoadOperandType
-    let length = 1
-    switch (sig){
-        case 0x00: a = const_zero; break;
-        case 0x01:
-            length++
-            a = g.const_(image[offset+1])
-            break;
-        default:  throw new Error("unsupported parameter signature "+sig)
-    }
+    let a = decodeLoadOperand(0x0F & sig, image, offset + 1)
     return {
-        a: a, nextOffset: offset + length
+        a: a.v, nextOffset: a.nextOffset
     }
 }
 
 export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opcode> {
     const opcode = image[offset]
+    let sig
     switch (opcode) {
         case 0x10:
-            let { a, b, x, nextOffset } = decodeFunctionSignature_in_in_out(image, offset+1)
+            let { a, b, x, nextOffset } = decodeFunctionSignature_in_in_out(image, offset + 1)
             return new ParseResult(g.add(a, b, x), nextOffset)
         case 0x20:
-            let sig = decodeFunctionSignature_in(image, offset+1)
-            if (sig.a instanceof Constant){
-                if (sig.a.v == 0 || sig.a.v == 1) return new ParseResult(g.return_(sig.a), sig.nextOffset)
-            }
-            throw new Error('jumps are not implemented')
-        default: 
+            sig = decodeFunctionSignature_in(image, offset + 1)
+            return new ParseResult(g.jump(sig.a), sig.nextOffset)
+        case 0x31:
+            sig = decodeFunctionSignature_in(image, offset + 1)
+            return new ParseResult(g.return_(sig.a), sig.nextOffset)
+        default:
             throw new Error(`unknown opcode ${opcode} at ${offset}`)
     }
 }
@@ -83,21 +101,31 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
     switch (callType) {
         case 0xC0: throw new Error("stack-called functions are not implemented")
         case 0xC1:
-            const argType = image[offset+1]
-            const argCount = image[offset+2]
-            if (argCount > 0) throw new Error("function arguments are not implemented")
-            offset = offset+3
-            let opcodes : Opcode[] = []
-            while(true){
+            const argType = image[offset + 1]
+            const argCount = image[offset + 2]
+            offset = offset + 3
+            let ftype
+            if (argType == 0 && argCount == 0) {
+                ftype = function_type_no_args
+            }
+            else {
+                if (argType != 4) throw new Error("only 32bit arguments are implemented")
+                if (argCount != 1) throw new Error("only a single function argument is implemented")
+                if (image[offset] != 0) throw new Error("only a single argument group is implemented")
+                offset += 2
+                ftype = function_type_i32
+            }
+            let opcodes: Opcode[] = []
+            while (true) {
                 let opcode = decodeOpcode(image, offset)
                 opcodes.push(opcode.v)
                 offset = opcode.nextOffset
-                if (opcode.v instanceof Return){
+                if (opcode.v instanceof Return) {
                     break
                 }
             }
             return new ParseResult(
-                new GlulxFunction(name || ("_"+offset.toString()), 
-                function_type_no_args, false, opcodes), offset)
+                new GlulxFunction(name || ("_" + offset.toString()),
+                    ftype, false, opcodes), offset)
     }
 }

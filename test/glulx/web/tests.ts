@@ -15,53 +15,59 @@ declare var WebAssembly: any
 
 const var0 = g.localVariable(0)
 
-const cases:　any[] = [
+const cases: 　any[] = [
     [   // function body
-            g.function_i32_i32("return_input_plus_one", [
-                g.add(var0, g.const_(1), g.setLocalVariable(0)),
-                g.return_(g.localVariable(0))]),
-            // input and expected output    
-            1, 2,
-            0, 1,
-            -1, 0
-        ],
-        [
-            g.function_i32_i32("return_constant", [
-                g.return_(g.const_(42))
-            ]),
-            99, 42
-        ],
+        g.function_i32_i32("return_input_plus_one", [
+            g.add(var0, g.const_(1), g.setLocalVariable(0)),
+            g.return_(g.localVariable(0))]),
+        // input and expected output    
+        1, 2,
+        0, 1,
+        -1, 0
+    ],
+    [
+        g.function_i32_i32("return_constant", [
+            g.return_(g.const_(42))
+        ]),
+        99, 42
+    ],
 ]
 
-const glulxercise_cases : any[][] = [
-        [
-            "_0x000012f7__add_03_fc_Fr00",
-            glulxercise => g.function_i32_i32(null, [
-                decodeOpcode(glulxercise, 0x00012f7).v,  // add  03 fc Fr:00
-                g.return_(var0)
-            ]),
-            88, 0xff,
-        ],
-        [
-            "_0x0000707c__return false",
-            gluxercise => decodeFunction(gluxercise, 0x707c).v,
-            [], 0
-        ],
-        [
-            "_0x00007084__return true",
-            gluxercise => decodeFunction(gluxercise, 0x7084).v,
-            [], 1
-        ]
+const glulxercise_cases: any[][] = [
+    [
+        "_0x000012f7__add_03_fc_Fr00",
+        glulxercise => g.function_i32_i32(null, [
+            decodeOpcode(glulxercise, 0x00012f7).v,  // add  03 fc Fr:00
+            g.return_(var0)
+        ]),
+        88, 0xff,
+    ],
+    [
+        "_0x0000707c__return false",
+        gluxercise => decodeFunction(gluxercise, 0x707c).v,
+        [], 0
+    ],
+    [
+        "_0x00007084__return true",
+        gluxercise => decodeFunction(gluxercise, 0x7084).v,
+        [], 1
+    ],
+    [
+        "_0x0000708d__return input",
+        gluxercise => decodeFunction(gluxercise, 0x708d).v,
+        0, 0,
+        1, 1
+    ],
 ]
 
-const gluxercise: Promise<any[][]> = new Promise(function(resolve, reject) {
+const gluxercise: Promise<any[][]> = new Promise(function (resolve, reject) {
     let request = new XMLHttpRequest();
-	request.open("GET", "../glulxercise.ulx");
-	request.responseType = 'arraybuffer';
-	request.onload = function(){
-	    if (request.status == 200){
+    request.open("GET", "../glulxercise.ulx");
+    request.responseType = 'arraybuffer';
+    request.onload = function () {
+        if (request.status == 200) {
             const image = new Uint8Array(request.response)
-            resolve(glulxercise_cases.map(c => { 
+            resolve(glulxercise_cases.map(c => {
                 const name = c.shift()
                 c[0] = c[0](image)
                 c[0].name = name
@@ -72,16 +78,16 @@ const gluxercise: Promise<any[][]> = new Promise(function(resolve, reject) {
             resolve([])
         }
     }
-    request.onerror = function() {
-         console.error('There was a network error. Could not load the glulxercise image');
-         resolve([])
+    request.onerror = function () {
+        console.error('There was a network error. Could not load the glulxercise image');
+        resolve([])
     }
-    
+
     request.send()
 })
 
 
-let wasm: Promise<any> = gluxercise.then( moreCases => {
+let wasm: Promise<any> = gluxercise.then(moreCases => {
     const all = cases.concat(moreCases)
     const mod = module(all.map(c => c[0]))
     const buffer = new ArrayBuffer(10000)
