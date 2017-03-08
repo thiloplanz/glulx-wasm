@@ -69,6 +69,11 @@ class Add implements Transcodable {
     transcode() { return this.x.transcode(c.i32.add(this.a.transcode(), this.b.transcode())) }
 }
 
+class Copy implements Transcodable {
+    constructor(private readonly a: LoadOperandType, private readonly x: StoreOperandType) { }
+    transcode() { return this.x.transcode(this.a.transcode()) }
+}
+
 export class Constant implements LoadOperandType {
     constructor(readonly v: uint32) { }
     transcode() { return c.i32.const(this.v) }
@@ -79,13 +84,27 @@ class MemoryAccess implements LoadOperandType {
     transcode(): Op<I32> { throw new Error("MemoryAccess not implemented") }
 }
 
+class MemoryStore implements StoreOperandType {
+    constructor(private readonly v: uint32) { }
+    transcode(input: Op<I32>): Op<Void> { throw new Error("MemoryAccess not implemented") }
+}
+
 class RAMAccess implements LoadOperandType {
     constructor(readonly address: uint32) { }
     transcode(): Op<I32> { throw new Error("MemoryAccess not implemented") }
 }
 
+class RAMStore implements StoreOperandType {
+    constructor(private readonly v: uint32) { }
+    transcode(input: Op<I32>): Op<Void> { throw new Error("MemoryAccess not implemented") }
+}
+
 class Pop implements LoadOperandType {
     transcode(): Op<I32> { throw new Error("Stack not implemented") }
+}
+
+class Push implements StoreOperandType {
+    transcode(): Op<Void> { throw new Error("Stack not implemented") }
 }
 
 class Local32 implements LoadOperandType {
@@ -107,6 +126,7 @@ const discard: StoreOperandType = new Discard
 
 const pop: LoadOperandType = new Pop
 
+const push: StoreOperandType = new Push
 
 export const g = {
     const_(v: uint32): Constant { return new Constant(v) },
@@ -116,6 +136,8 @@ export const g = {
     ram(address: uint32): LoadOperandType { return new RAMAccess(address) },
 
     pop: pop,
+
+    push: push,
 
     discard: discard,
 
@@ -129,7 +151,17 @@ export const g = {
         return new StoreLocal32(index / 4)
     },
 
+    storeToMemory(addr: uint32): StoreOperandType {
+        return new MemoryStore(addr)
+    },
+
+    storeToRAM(addr: uint32): StoreOperandType {
+        return new RAMStore(addr)
+    },
+
     add(a: LoadOperandType, b: LoadOperandType, x: StoreOperandType): Opcode { return new Add(a, b, x) },
+
+    copy(a: LoadOperandType, x: StoreOperandType): Opcode { return new Copy(a, x) },
 
     return_(v: LoadOperandType): Opcode { return new Return(v) },
 

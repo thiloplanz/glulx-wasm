@@ -20,8 +20,13 @@ const gluxercise: Promise<any[][]> = new Promise(function (resolve, reject) {
             const image = new Uint8Array(request.response)
             resolve(cases.map(c => {
                 const name = c.shift()
-                c[0] = c[0](image)
-                c[0].name = name
+                try {
+                    c[0] = c[0](image)
+                    c[0].name = name
+                } catch (e) {
+                    console.warn("failed to compile " + name, e)
+                    c[0] = { failed: true, name: name }
+                }
                 return c
             }))
         } else {
@@ -38,7 +43,7 @@ const gluxercise: Promise<any[][]> = new Promise(function (resolve, reject) {
 })
 
 const wasm: Promise<any> = gluxercise.then(cases => {
-    const mod = module(cases.map(c => c[0]))
+    const mod = module(cases.map(c => c[0]).filter(x => !x.failed))
     const buffer = new ArrayBuffer(10000)
     const emitter = new BufferedEmitter(buffer)
     mod.emit(emitter)
@@ -71,6 +76,18 @@ const cases: any[][] = [
         0, 0,
         1, 1
     ],
+    [
+        "_0x00007098__return false",
+        gluxercise => decodeFunction(gluxercise, 0x7098).v,
+        0, 0,
+        1, 0
+    ],
+    [
+        "_0x000070a6__return true",
+        gluxercise => decodeFunction(gluxercise, 0x70a6).v,
+        0, 1,
+        1, 1
+    ],
 ]
 
 
@@ -82,11 +99,13 @@ declare var WebAssembly: any
 
 function runCase(test: Test, name: string, data: any[]) {
     wasm.then(module => {
-        for (let i = 1; i < data.length; i += 2) {
+        const func = module && module.instance && module.instance.exports && module.instance.exports[name]
+
+        test.ok(func, "compiled function was found in exports")
+        if (func) for (let i = 1; i < data.length; i += 2) {
             let input = data[i]
             let expected = data[i + 1]
-            test.ok(module && module.instance && module.instance.exports && module.instance.exports[name], "compiled function is missing")
-            let result = module.instance.exports[name](input)
+            let result = func(input)
             test.equals(result, expected, input + " -> " + expected + ", got " + result)
 
         }

@@ -47,11 +47,12 @@ cases.forEach(c => {
 
 function runCase(test: Test, name: string, data: any[]) {
     wasm.then(module => {
+        const func = module && module.instance && module.instance.exports && module.instance.exports[name]
+        test.ok(func, "compiled function was found in exports")
         for (let i = 1; i < data.length; i += 2) {
             let input = data[i]
             let expected = data[i + 1]
-            test.ok(module, "module could not be compiled")
-            let result = module.instance.exports[name](input)
+            let result = func(input)
             test.equals(result, expected, input + " -> " + expected + ", got " + result)
         }
         test.done()

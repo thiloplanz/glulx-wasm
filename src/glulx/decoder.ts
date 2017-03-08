@@ -30,43 +30,52 @@ function uint32(image: Uint8Array, offset: number) {
 function decodeLoadOperand(code: number, image: Uint8Array, offset: number) {
     // TODO: opcode rule about address decoding format
     switch (code) {
-        case 0x00: return new ParseResult(const_zero, offset)
-        case 0x01: return new ParseResult(g.const_(image[offset]), offset + 1)
-        case 0x02: return new ParseResult(g.const_(uint16(image, offset)), offset + 2)
-        case 0x03: return new ParseResult(g.const_(uint32(image, offset)), offset + 4)
-        case 0x05: return new ParseResult(g.memory(image[offset]), offset + 1)
-        case 0x06: return new ParseResult(g.memory(uint16(image, offset)), offset + 2)
-        case 0x07: return new ParseResult(g.memory(uint32(image, offset)), offset + 4)
-        case 0x08: return new ParseResult(g.pop, offset)
-        case 0x09: return new ParseResult(g.localVariable(image[offset]), offset + 1)
-        case 0x0A: return new ParseResult(g.localVariable(uint16(image, offset)), offset + 2)
-        case 0x0B: return new ParseResult(g.localVariable(uint32(image, offset)), offset + 4)
-        case 0x0D: return new ParseResult(g.ram(image[offset]), offset + 1)
-        case 0x0E: return new ParseResult(g.ram(uint16(image, offset)), offset + 2)
-        case 0x0F: return new ParseResult(g.ram(uint32(image, offset)), offset + 4)
+        case 0x0: return new ParseResult(const_zero, offset)
+        case 0x1: return new ParseResult(g.const_(image[offset]), offset + 1)
+        case 0x2: return new ParseResult(g.const_(uint16(image, offset)), offset + 2)
+        case 0x3: return new ParseResult(g.const_(uint32(image, offset)), offset + 4)
+        case 0x5: return new ParseResult(g.memory(image[offset]), offset + 1)
+        case 0x6: return new ParseResult(g.memory(uint16(image, offset)), offset + 2)
+        case 0x7: return new ParseResult(g.memory(uint32(image, offset)), offset + 4)
+        case 0x8: return new ParseResult(g.pop, offset)
+        case 0x9: return new ParseResult(g.localVariable(image[offset]), offset + 1)
+        case 0xA: return new ParseResult(g.localVariable(uint16(image, offset)), offset + 2)
+        case 0xB: return new ParseResult(g.localVariable(uint32(image, offset)), offset + 4)
+        case 0xD: return new ParseResult(g.ram(image[offset]), offset + 1)
+        case 0xE: return new ParseResult(g.ram(uint16(image, offset)), offset + 2)
+        case 0xF: return new ParseResult(g.ram(uint32(image, offset)), offset + 4)
         default: throw new Error("unsupported load operand type " + code)
+    }
+}
+
+function decodeStoreOperand(code: number, image: Uint8Array, offset: number) {
+    switch (code) {
+        case 0x0: return new ParseResult(g.discard, offset);
+        case 0x5: return new ParseResult(g.storeToMemory(image[offset]), offset + 1)
+        case 0x6: return new ParseResult(g.storeToMemory(uint16(image, offset)), offset + 2)
+        case 0x7: return new ParseResult(g.storeToMemory(uint32(image, offset)), offset + 4)
+        case 0x8: return new ParseResult(g.push, offset)
+        case 0x9: return new ParseResult(g.setLocalVariable(image[offset]), offset + 1)
+        case 0xA: return new ParseResult(g.setLocalVariable(uint16(image, offset)), offset + 2)
+        case 0xB: return new ParseResult(g.setLocalVariable(uint32(image, offset)), offset + 4)
+        case 0xD: return new ParseResult(g.storeToRAM(image[offset]), offset + 1)
+        case 0xE: return new ParseResult(g.storeToRAM(uint16(image, offset)), offset + 2)
+        case 0xF: return new ParseResult(g.storeToRAM(uint32(image, offset)), offset + 4)
+        default: throw new Error("unsupported store operand type " + code)
     }
 }
 
 function decodeFunctionSignature_in_in_out(image: Uint8Array, offset: number) {
     const sig1 = image[offset]
     const sig2 = image[offset + 1]
-    offset += 2
-    let a = decodeLoadOperand(0x0F & sig1, image, offset)
-    offset = a.nextOffset
-    let b = decodeLoadOperand(sig1 >>> 4, image, offset)
-    offset = b.nextOffset
-    let x
-    switch (sig2) {
-        case 0x00: x = g.discard; break;
-        case 0x09: x = g.setLocalVariable(image[offset + length]); length++; break;
-        default: throw new Error("unsupported return signature " + sig2)
-    }
+    let a = decodeLoadOperand(0x0F & sig1, image, offset + 2)
+    let b = decodeLoadOperand(sig1 >>> 4, image, a.nextOffset)
+    let x = decodeStoreOperand(0x0F & sig2, image, b.nextOffset)
     return {
         a: a.v,
         b: b.v,
-        x: x,
-        nextOffset: offset + length
+        x: x.v,
+        nextOffset: x.nextOffset
     }
 }
 
@@ -75,6 +84,15 @@ function decodeFunctionSignature_in(image: Uint8Array, offset: number) {
     let a = decodeLoadOperand(0x0F & sig, image, offset + 1)
     return {
         a: a.v, nextOffset: a.nextOffset
+    }
+}
+
+function decodeFunctionSignature_in_out(image: Uint8Array, offset: number) {
+    const sig = image[offset]
+    let a = decodeLoadOperand(0x0F & sig, image, offset + 1)
+    let out = decodeStoreOperand(sig >>> 4, image, a.nextOffset)
+    return {
+        a: a.v, out: out.v, nextOffset: out.nextOffset
     }
 }
 
@@ -91,6 +109,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x31:
             sig = decodeFunctionSignature_in(image, offset + 1)
             return new ParseResult(g.return_(sig.a), sig.nextOffset)
+        case 0x40:
+            sig = decodeFunctionSignature_in_out(image, offset + 1)
+            return new ParseResult(g.copy(sig.a, sig.out), sig.nextOffset)
         default:
             throw new Error(`unknown opcode ${opcode} at ${offset}`)
     }
