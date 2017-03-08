@@ -15,6 +15,8 @@ declare var WebAssembly: any
 
 const var0 = g.localVariable(0)
 
+const rom = new Uint8Array([1, 1, 2, 3, 5, 8, 13, 21, 34, 55])
+
 const cases: any[] = [
     [   // function body
         g.function_i32_i32("return_input_plus_one", [
@@ -37,11 +39,17 @@ const cases: any[] = [
             g.return_(var0)
         ]),
         42, 42
+    ],
+    [
+        g.function_i32_i32("read from ROM", [
+            g.return_(g.memory(0))
+        ]),
+        0, 0x03020101,  // little endian
     ]
 ]
 
-const mod = module(cases.map(c => c[0]))
-const buffer = new ArrayBuffer(10000)
+const mod = module(cases.map(c => c[0]), rom)
+const buffer = new ArrayBuffer(32000)
 const emitter = new BufferedEmitter(buffer)
 mod.emit(emitter)
 const wasm = WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length))

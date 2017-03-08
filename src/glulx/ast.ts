@@ -84,7 +84,10 @@ export class Constant implements LoadOperandType {
 
 class MemoryAccess implements LoadOperandType {
     constructor(readonly address: uint32) { }
-    transcode(): Op<I32> { throw new Error("MemoryAccess not implemented") }
+    transcode(): Op<I32> {
+        // TODO range checking
+        return c.i32.load(c.align32, c.i32.const(this.address))
+    }
 }
 
 class MemoryStore implements StoreOperandType {

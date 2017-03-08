@@ -11,13 +11,15 @@ import { module } from '../../../src/glulx/module'
 import { BufferedEmitter } from '../../../src/emit'
 import { decodeOpcode, decodeFunction } from '../../../src/glulx/decoder'
 
+let image: Uint8Array
+
 const gluxercise: Promise<any[][]> = new Promise(function (resolve, reject) {
     let request = new XMLHttpRequest();
     request.open("GET", "../glulxercise.ulx");
     request.responseType = 'arraybuffer';
     request.onload = function () {
         if (request.status == 200) {
-            const image = new Uint8Array(request.response)
+            image = new Uint8Array(request.response)
             resolve(cases.map(c => {
                 const name = c.shift()
                 try {
@@ -43,8 +45,8 @@ const gluxercise: Promise<any[][]> = new Promise(function (resolve, reject) {
 })
 
 const wasm: Promise<any> = gluxercise.then(cases => {
-    const mod = module(cases.map(c => c[0]).filter(x => !x.failed))
-    const buffer = new ArrayBuffer(10000)
+    const mod = module(cases.map(c => c[0]).filter(x => !x.failed), image)
+    const buffer = new ArrayBuffer(1024 * 1024)
     const emitter = new BufferedEmitter(buffer)
     mod.emit(emitter)
     return WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length))
