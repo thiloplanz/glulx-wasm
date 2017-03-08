@@ -88,6 +88,14 @@ const cases: any[][] = [
         0, 1,
         1, 1
     ],
+    [
+        "_0x000070b5__jump_table",
+        gluxercise => decodeFunction(gluxercise, 0x70b5).v,
+        0, 0,
+        1, 1,
+        2, 2,
+        5, 3
+    ],
 ]
 
 
@@ -105,9 +113,13 @@ function runCase(test: Test, name: string, data: any[]) {
         if (func) for (let i = 1; i < data.length; i += 2) {
             let input = data[i]
             let expected = data[i + 1]
-            let result = func(input)
-            test.equals(result, expected, input + " -> " + expected + ", got " + result)
-
+            try {
+                let result = func(input)
+                test.equals(result, expected, input + " -> " + expected + ", got " + result)
+            }
+            catch (e) {
+                test.ifError(e)
+            }
         }
         test.done()
     })

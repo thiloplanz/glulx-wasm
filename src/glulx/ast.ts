@@ -45,6 +45,7 @@ export class Return implements Transcodable {
 
 const zero = c.i32.const(0)
 const one = c.i32.const(1)
+const two = c.i32.const(2)
 const return_zero = c.return_(zero)
 const return_one = c.return_(one)
 
@@ -56,11 +57,13 @@ class Jump implements Transcodable {
         if (v instanceof Constant) {
             if (v.v == 0) return return_zero
             if (v.v == 1) return return_one
-            return c.unreachable /* only returns are implemented*/
+            if (v.v == 2) return c.nop
+            return c.unreachable /* actual jumps are not implemented*/
         }
         const tv = v.transcode()
-        return c.if_(c.i32, c.i32.eq(zero, tv), [return_zero],
-            [c.if_(c.i32, c.i32.eq(one, tv), [return_one], [c.unreachable /* only returns are implemented*/])])
+        return c.if_(c.void, c.i32.eq(zero, tv), [return_zero],
+            [c.if_(c.void, c.i32.eq(one, tv), [return_one],
+                [c.if_(c.void, c.i32.ne(two, tv), [c.unreachable /* actual jumps are not implemented*/])])])
     }
 }
 

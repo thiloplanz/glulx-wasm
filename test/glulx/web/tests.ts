@@ -31,6 +31,13 @@ const cases: any[] = [
         ]),
         99, 42
     ],
+    [
+        g.function_i32_i32("jump 2 (nop)", [
+            g.jump(g.const_(2)),
+            g.return_(var0)
+        ]),
+        42, 42
+    ]
 ]
 
 const mod = module(cases.map(c => c[0]))
