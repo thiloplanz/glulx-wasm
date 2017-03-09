@@ -49,6 +49,10 @@ const two = c.i32.const(2)
 const return_zero = c.return_(zero)
 const return_one = c.return_(one)
 
+// the special cases (0,1 = return, 2 = nop) for jump instructions
+const jump_vectors = [c.varuint32(0), c.varuint32(1), c.varuint32(3)]
+const real_jump = c.varuint32(2)
+
 class Jump implements Transcodable {
     constructor(private readonly v: LoadOperandType) { }
     transcode() {
@@ -61,9 +65,16 @@ class Jump implements Transcodable {
             return c.unreachable /* actual jumps are not implemented*/
         }
         const tv = v.transcode()
-        return c.if_(c.void, c.i32.eq(zero, tv), [return_zero],
-            [c.if_(c.void, c.i32.eq(one, tv), [return_one],
-                [c.if_(c.void, c.i32.ne(two, tv), [c.unreachable /* actual jumps are not implemented*/])])])
+        return c.void_block([c.void_block([c.void_block([c.void_block([
+            c.br_table(jump_vectors, real_jump, tv),
+        ]),
+            return_zero
+        ]),
+            return_one
+        ]),
+        c.unreachable /* actual jumps are not implemented*/
+        ])
+
     }
 }
 
