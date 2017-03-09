@@ -96,20 +96,32 @@ function decodeFunctionSignature_in_out(image: Uint8Array, offset: number) {
     }
 }
 
+function decodeFunctionSignature_in_in(image: Uint8Array, offset: number) {
+    const sig = image[offset]
+    let a = decodeLoadOperand(0x0F & sig, image, offset + 1)
+    let b = decodeLoadOperand(sig >>> 4, image, a.nextOffset)
+    return {
+        a: a.v, b: b.v, nextOffset: b.nextOffset
+    }
+}
+
 export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opcode> {
     const opcode = image[offset]
     let sig
     switch (opcode) {
-        case 0x10:
+        case 0x10:  // add
             let { a, b, x, nextOffset } = decodeFunctionSignature_in_in_out(image, offset + 1)
             return new ParseResult(g.add(a, b, x), nextOffset)
-        case 0x20:
+        case 0x20:  // jump
             sig = decodeFunctionSignature_in(image, offset + 1)
             return new ParseResult(g.jump(sig.a), sig.nextOffset)
-        case 0x31:
+        case 0x22:  // jz
+            sig = decodeFunctionSignature_in_in(image, offset + 1)
+            return new ParseResult(g.jz(sig.a, sig.b), sig.nextOffset)
+        case 0x31:  // return
             sig = decodeFunctionSignature_in(image, offset + 1)
             return new ParseResult(g.return_(sig.a), sig.nextOffset)
-        case 0x40:
+        case 0x40:  // copy
             sig = decodeFunctionSignature_in_out(image, offset + 1)
             return new ParseResult(g.copy(sig.a, sig.out), sig.nextOffset)
         default:

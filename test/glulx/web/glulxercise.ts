@@ -98,6 +98,13 @@ const cases: any[][] = [
         2, 2,
         5, 3
     ],
+    [
+        "_0x000070eb__jz",
+        gluxercise => decodeFunction(gluxercise, 0x70eb).v,
+        0, 0,
+        1, 99
+    ],
+
 ]
 
 

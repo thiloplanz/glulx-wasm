@@ -38,7 +38,7 @@ export const function_type_i32 = c.func_type([c.i32], c.i32)
 export const function_type_no_args = c.func_type([], c.i32)
 
 
-export class Return implements Transcodable {
+export class Return implements Opcode {
     constructor(private readonly v: LoadOperandType) { }
     transcode() { return c.return_(this.v.transcode()) }
 }
@@ -53,7 +53,7 @@ const return_one = c.return_(one)
 const jump_vectors = [c.varuint32(0), c.varuint32(1), c.varuint32(3)]
 const real_jump = c.varuint32(2)
 
-class Jump implements Transcodable {
+class Jump implements Opcode {
     constructor(private readonly v: LoadOperandType) { }
     transcode() {
         const v = this.v
@@ -78,12 +78,26 @@ class Jump implements Transcodable {
     }
 }
 
-class Add implements Transcodable {
+class JumpIfZero implements Opcode {
+    constructor(private readonly cond: LoadOperandType, private readonly v: LoadOperandType) { }
+    transcode() {
+        const { cond, v } = this
+        const jump = new Jump(v).transcode()
+        // (premature) optimization for constant condition
+        if (cond instanceof Constant) {
+            if (cond.v == 0) return jump
+            return c.nop
+        }
+        return c.if_(c.void, c.i32.eqz(cond.transcode()), [jump])
+    }
+}
+
+class Add implements Opcode {
     constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
     transcode() { return this.x.transcode(c.i32.add(this.a.transcode(), this.b.transcode())) }
 }
 
-class Copy implements Transcodable {
+class Copy implements Opcode {
     constructor(private readonly a: LoadOperandType, private readonly x: StoreOperandType) { }
     transcode() { return this.x.transcode(this.a.transcode()) }
 }
@@ -183,6 +197,8 @@ export const g = {
     return_(v: LoadOperandType): Opcode { return new Return(v) },
 
     jump(v: LoadOperandType): Opcode { return new Jump(v) },
+
+    jz(condition: LoadOperandType, vector: LoadOperandType): Opcode { return new JumpIfZero(condition, vector) },
 
     function_i32_i32(name: string, opcodes: Opcode[]): GlulxFunction {
         return new GlulxFunction(name, function_type_i32, false, opcodes)
