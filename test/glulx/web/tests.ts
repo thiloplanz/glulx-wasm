@@ -47,6 +47,15 @@ const cases: any[] = [
             g.return_(g.memory(0))
         ]),
         0, 0x01010203,  // big endian
+    ],
+    [
+        g.function_i32_i32(addr++, "callf", [
+            g.callf(g.const_(0), [var0], g.setLocalVariable(0)),
+            g.return_(var0)
+        ]),
+        1, 2,
+        0, 1,
+        -1, 0
     ]
 ]
 

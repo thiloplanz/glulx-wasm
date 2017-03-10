@@ -49,6 +49,22 @@ export class Return implements Opcode {
     transcode(context) { return c.return_(this.v.transcode(context)) }
 }
 
+class Callf implements Opcode {
+    constructor(private readonly address: LoadOperandType, private readonly args: LoadOperandType[], private readonly result: StoreOperandType) { }
+    transcode(context: TranscodingContext) {
+        const { address, args, result } = this
+        if (address instanceof Constant) {
+            const index = context.callableFunctions[address.v]
+            if (!index) {
+                console.error(`unknown function being called: ${address}`)
+                return c.unreachable
+            }
+            return result.transcode(c.call(c.i32, index, args.map(x => x.transcode(context))))
+        }
+        return c.unreachable /* dynamic calls are not implemented */
+    }
+}
+
 const zero = c.i32.const(0)
 const one = c.i32.const(1)
 const two = c.i32.const(2)
@@ -224,6 +240,11 @@ export const g = {
     copy(a: LoadOperandType, x: StoreOperandType): Opcode { return new Copy(a, x) },
 
     return_(v: LoadOperandType): Opcode { return new Return(v) },
+
+    callf(address: LoadOperandType, args: LoadOperandType[], result: StoreOperandType): Opcode {
+        if (args.length > 3) throw new Error(`callf does not take more than three arguments, you gave me ${args.length}`)
+        return new Callf(address, args, result)
+    },
 
     jump(v: LoadOperandType): Opcode { return new Jump(v) },
 
