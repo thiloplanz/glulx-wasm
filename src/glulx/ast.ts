@@ -6,11 +6,16 @@
 
 // AST for Glulx functions
 
-import { c, N, I32, Void, Op, FunctionBody, FuncType } from '../ast'
+import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module } from '../ast'
 import { uint32 } from '../basic-types'
 
+export interface TranscodingContext {
+    callableFunctions: VarUint32[],
+    module: Module
+}
+
 export interface Transcodable {
-    transcode(): N
+    transcode(context: TranscodingContext): N
 }
 
 export interface Opcode extends Transcodable {
@@ -18,7 +23,7 @@ export interface Opcode extends Transcodable {
 }
 
 export interface LoadOperandType extends Transcodable {
-    transcode(): Op<I32>
+    transcode(context: TranscodingContext): Op<I32>
 }
 
 export interface StoreOperandType {
@@ -27,6 +32,7 @@ export interface StoreOperandType {
 
 export class GlulxFunction {
     constructor(
+        readonly address: uint32,
         readonly name: string,
         readonly type: FuncType,
         readonly stackCalled: Boolean,
@@ -40,7 +46,7 @@ export const function_type_no_args = c.func_type([], c.i32)
 
 export class Return implements Opcode {
     constructor(private readonly v: LoadOperandType) { }
-    transcode() { return c.return_(this.v.transcode()) }
+    transcode(context) { return c.return_(this.v.transcode(context)) }
 }
 
 const zero = c.i32.const(0)
@@ -55,7 +61,7 @@ const real_jump = c.varuint32(2)
 
 class Jump implements Opcode {
     constructor(private readonly v: LoadOperandType) { }
-    transcode() {
+    transcode(context) {
         const v = this.v
         // optimization for constant jump vectors
         if (v instanceof Constant) {
@@ -64,7 +70,7 @@ class Jump implements Opcode {
             if (v.v == 2) return c.nop
             return c.unreachable /* actual jumps are not implemented*/
         }
-        const tv = v.transcode()
+        const tv = v.transcode(context)
         return c.void_block([c.void_block([c.void_block([c.void_block([
             c.br_table(jump_vectors, real_jump, tv),
         ]),
@@ -80,26 +86,26 @@ class Jump implements Opcode {
 
 class JumpIfZero implements Opcode {
     constructor(private readonly cond: LoadOperandType, private readonly v: LoadOperandType) { }
-    transcode() {
+    transcode(context) {
         const { cond, v } = this
-        const jump = new Jump(v).transcode()
+        const jump = new Jump(v).transcode(context)
         // (premature) optimization for constant condition
         if (cond instanceof Constant) {
             if (cond.v == 0) return jump
             return c.nop
         }
-        return c.if_(c.void, c.i32.eqz(cond.transcode()), [jump])
+        return c.if_(c.void, c.i32.eqz(cond.transcode(context)), [jump])
     }
 }
 
 class Add implements Opcode {
     constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
-    transcode() { return this.x.transcode(c.i32.add(this.a.transcode(), this.b.transcode())) }
+    transcode(context) { return this.x.transcode(c.i32.add(this.a.transcode(context), this.b.transcode(context))) }
 }
 
 class Copy implements Opcode {
     constructor(private readonly a: LoadOperandType, private readonly x: StoreOperandType) { }
-    transcode() { return this.x.transcode(this.a.transcode()) }
+    transcode(context) { return this.x.transcode(this.a.transcode(context)) }
 }
 
 export class Constant implements LoadOperandType {
@@ -107,11 +113,34 @@ export class Constant implements LoadOperandType {
     transcode() { return c.i32.const(this.v) }
 }
 
+function findRom(module: Module): Uint8Array {
+    // TODO properly introspection
+    const data_sec = module.v[module.v.length - 1].v[3].v[3]
+    return data_sec.v as Uint8Array
+}
+
+
+export function read_uint16(image: Uint8Array, offset: number) {
+    return image[offset] * 256 + image[offset + 1]
+}
+
+export function read_uint32(image: Uint8Array, offset: number) {
+    return image[offset] * 0x1000000 + image[offset + 1] * 0x10000 + image[offset + 2] * 0x100 + image[offset + 3]
+}
+
 class MemoryAccess implements LoadOperandType {
     constructor(readonly address: uint32) { }
-    transcode(): Op<I32> {
+    transcode(context: TranscodingContext): Op<I32> {
         // TODO range checking
-        return c.i32.load(c.align32, c.i32.const(this.address))
+
+        // inline access to ROM 
+        const rom = findRom(context.module)
+        const { address } = this
+        if (address < rom.byteLength)
+            return c.i32.const(read_uint32(rom, address))
+
+        // TODO: need to convert between big-endian (Glulx) and little-endian (wasm)
+        return c.i32.load(c.align32, c.i32.const(address))
     }
 }
 
@@ -200,7 +229,7 @@ export const g = {
 
     jz(condition: LoadOperandType, vector: LoadOperandType): Opcode { return new JumpIfZero(condition, vector) },
 
-    function_i32_i32(name: string, opcodes: Opcode[]): GlulxFunction {
-        return new GlulxFunction(name, function_type_i32, false, opcodes)
+    function_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
+        return new GlulxFunction(address, name, function_type_i32, false, opcodes)
     }
 }

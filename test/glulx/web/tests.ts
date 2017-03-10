@@ -17,9 +17,11 @@ const var0 = g.localVariable(0)
 
 const rom = new Uint8Array([1, 1, 2, 3, 5, 8, 13, 21, 34, 55])
 
+let addr = 0;
+
 const cases: any[] = [
     [   // function body
-        g.function_i32_i32("return_input_plus_one", [
+        g.function_i32_i32(addr++, "return_input_plus_one", [
             g.add(var0, g.const_(1), g.setLocalVariable(0)),
             g.return_(var0)]),
         // input and expected output    
@@ -28,23 +30,23 @@ const cases: any[] = [
         -1, 0
     ],
     [
-        g.function_i32_i32("return_constant", [
+        g.function_i32_i32(addr++, "return_constant", [
             g.return_(g.const_(42))
         ]),
         99, 42
     ],
     [
-        g.function_i32_i32("jump 2 (nop)", [
+        g.function_i32_i32(addr++, "jump 2 (nop)", [
             g.jump(g.const_(2)),
             g.return_(var0)
         ]),
         42, 42
     ],
     [
-        g.function_i32_i32("read from ROM", [
+        g.function_i32_i32(addr++, "read from ROM", [
             g.return_(g.memory(0))
         ]),
-        0, 0x03020101,  // little endian
+        0, 0x01010203,  // big endian
     ]
 ]
 

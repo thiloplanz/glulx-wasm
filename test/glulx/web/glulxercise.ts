@@ -56,7 +56,7 @@ const wasm: Promise<any> = gluxercise.then(cases => {
 const cases: any[][] = [
     [
         "_0x000012f7__add_03_fc_Fr00",
-        glulxercise => g.function_i32_i32(null, [
+        glulxercise => g.function_i32_i32(0, null, [
             decodeOpcode(glulxercise, 0x00012f7).v,  // add  03 fc Fr:00
             g.return_(g.localVariable(0))
         ]),
@@ -104,6 +104,13 @@ const cases: any[][] = [
         0, 0,
         1, 99
     ],
+    [
+        "_0x000070f6__jz",
+        gluxercise => decodeFunction(gluxercise, 0x70f6).v,
+        0, 1,
+        42, 99
+    ],
+
 
 ]
 

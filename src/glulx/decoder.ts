@@ -9,23 +9,17 @@
 import {
     g, LoadOperandType, StoreOperandType, Opcode,
     Constant, GlulxFunction, Return, function_type_no_args,
-    function_type_i32
+    function_type_i32, read_uint16, read_uint32
 } from './ast'
 
 export class ParseResult<T>{
     constructor(readonly v: T, readonly nextOffset: number) { }
 }
 
+const uint16 = read_uint16
+const uint32 = read_uint32
 
 const const_zero = g.const_(0)
-
-function uint16(image: Uint8Array, offset: number) {
-    return image[offset] * 256 + image[offset + 1]
-}
-
-function uint32(image: Uint8Array, offset: number) {
-    return image[offset] * 0x1000000 + image[offset + 1] * 0x10000 + image[offset + 2] * 0x100 + image[offset + 3]
-}
 
 function decodeLoadOperand(code: number, image: Uint8Array, offset: number) {
     // TODO: opcode rule about address decoding format
@@ -158,7 +152,7 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
                 }
             }
             return new ParseResult(
-                new GlulxFunction(name || ("_" + offset.toString()),
+                new GlulxFunction(offset, name || ("_" + offset.toString()),
                     ftype, false, opcodes), offset)
     }
 }
