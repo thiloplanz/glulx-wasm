@@ -8,6 +8,7 @@
 
 import { g, Opcode, GlulxFunction, TranscodingContext, function_type_i32, function_type_no_args } from './ast'
 import { Module, c, FunctionBody, VarUint32 } from '../ast'
+import { uint32 } from '../basic-types'
 
 const {
     function_section, export_section, code_section, func_type, i32, varuint32, export_entry, str_ascii,
@@ -25,8 +26,8 @@ function function_body(opcodes: Opcode[], context: TranscodingContext): Function
     return c.function_body([ /* additional local variables here */], opcodes.map(o => o.transcode(context)))
 }
 
-export function module(functions: GlulxFunction[], rom: Uint8Array): Module {
-    const memoryPages = varuint32(rom.byteLength / (64 * 1024) + 1)
+export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: uint32, endMem: uint32): Module {
+    const memoryPages = varuint32(image.byteLength / (64 * 1024) + 1)
     const functionIndex: VarUint32[] = []
     functions.forEach((f, i) => functionIndex[f.address] = varuint32(i))
 
@@ -44,7 +45,7 @@ export function module(functions: GlulxFunction[], rom: Uint8Array): Module {
     ))
 
 
-    const data_sec = data_section([data_segment(zero, init_expr([c.i32.const(0)]), data(rom))])
+    const data_sec = data_section([data_segment(zero, init_expr([c.i32.const(0)]), data(image))])
 
     return c.module([
         type_section,
@@ -53,7 +54,9 @@ export function module(functions: GlulxFunction[], rom: Uint8Array): Module {
         export_sec,
         code_section(functions.map(f => function_body(f.opcodes, {
             callableFunctions: functionIndex,
-            module: c.module([type_section, function_sec, data_sec])
+            image,
+            ramStart,
+            endMem
         }))),
         data_sec
     ])

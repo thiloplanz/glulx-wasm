@@ -45,7 +45,7 @@ const gluxercise: Promise<any[][]> = new Promise(function (resolve, reject) {
 })
 
 const wasm: Promise<any> = gluxercise.then(cases => {
-    const mod = module(cases.map(c => c[0]).filter(x => !x.failed), image)
+    const mod = module(cases.map(c => c[0]).filter(x => !x.failed), image, 0x00027600, 0x0002b200)
     const buffer = new ArrayBuffer(1024 * 1024)
     const emitter = new BufferedEmitter(buffer)
     mod.emit(emitter)

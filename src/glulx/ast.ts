@@ -11,7 +11,9 @@ import { uint32 } from '../basic-types'
 
 export interface TranscodingContext {
     callableFunctions: VarUint32[],
-    module: Module
+    image: Uint8Array,
+    ramStart: uint32,
+    endMem: uint32
 }
 
 export interface Transcodable {
@@ -129,12 +131,6 @@ export class Constant implements LoadOperandType {
     transcode() { return c.i32.const(this.v) }
 }
 
-function findRom(module: Module): Uint8Array {
-    // TODO properly introspection
-    const data_sec = module.v[module.v.length - 1].v[3].v[3]
-    return data_sec.v as Uint8Array
-}
-
 
 export function read_uint16(image: Uint8Array, offset: number) {
     return image[offset] * 256 + image[offset + 1]
@@ -150,10 +146,9 @@ class MemoryAccess implements LoadOperandType {
         // TODO range checking
 
         // inline access to ROM 
-        const rom = findRom(context.module)
         const { address } = this
-        if (address < rom.byteLength)
-            return c.i32.const(read_uint32(rom, address))
+        if (address < context.ramStart)
+            return c.i32.const(read_uint32(context.image, address))
 
         // TODO: need to convert between big-endian (Glulx) and little-endian (wasm)
         return c.i32.load(c.align32, c.i32.const(address))

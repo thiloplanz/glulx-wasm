@@ -59,7 +59,7 @@ const cases: any[] = [
     ]
 ]
 
-const mod = module(cases.map(c => c[0]), rom)
+const mod = module(cases.map(c => c[0]), rom, rom.byteLength, rom.byteLength)
 const buffer = new ArrayBuffer(32000)
 const emitter = new BufferedEmitter(buffer)
 mod.emit(emitter)

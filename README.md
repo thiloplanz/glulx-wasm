@@ -16,3 +16,15 @@ There is a unit test to look at, which takes an AST with a sequence of Glulx ope
 2. compile the tests with `cd test/glulx; npm start`
 3. go to `http://localhost:3000/web/index.html` to run the tests, see if everything is green
 4. You can take a look at the compiled module in the Chrome Developer Tools: Go to the "Sources" tab, there should be a section called "wasm"
+
+
+### Memory layout
+
+The Glulx virtual machine memory is mapped directly to the WASM module's default linear memory.
+
+That means that ROM starts at address 0 and RAM starts at the specified RAMSTART.
+After that come the regions for the managed heap (TODO) and the stack (TODO).
+
+A little complication occurs when reading values from memory because Glulx uses a big-endian format,
+versus the WASM opcodes expect little-endian. The runtime library provides for conversion functions
+that the compiled code calls into (TODO).
