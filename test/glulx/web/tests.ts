@@ -56,7 +56,16 @@ const cases: any[] = [
         1, 2,
         0, 1,
         -1, 0
-    ]
+    ],
+    [
+        g.function_i32_i32(addr++, "push/pop", [
+            g.add(var0, var0, g.push),
+            g.return_(g.pop)
+        ]),
+        1, 2,
+        -1, -2,
+        21, 42
+    ],
 ]
 
 const mod = module(cases.map(c => c[0]), rom, rom.byteLength, rom.byteLength)

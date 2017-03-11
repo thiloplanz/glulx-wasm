@@ -8,6 +8,7 @@
 
 import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module } from '../ast'
 import { uint32 } from '../basic-types'
+import { vmlib_call, function_type_i32 } from './vmlib'
 
 export interface TranscodingContext {
     callableFunctions: VarUint32[],
@@ -41,9 +42,6 @@ export class GlulxFunction {
         readonly opcodes: Opcode[]) { }
 }
 
-export const function_type_i32 = c.func_type([c.i32], c.i32)
-
-export const function_type_no_args = c.func_type([], c.i32)
 
 
 export class Return implements Opcode {
@@ -171,11 +169,11 @@ class RAMStore implements StoreOperandType {
 }
 
 class Pop implements LoadOperandType {
-    transcode(): Op<I32> { throw new Error("Stack not implemented") }
+    transcode(): Op<I32> { return vmlib_call.pop }
 }
 
 class Push implements StoreOperandType {
-    transcode(): Op<Void> { throw new Error("Stack not implemented") }
+    transcode(input: Op<I32>): Op<Void> { return vmlib_call.push(input) }
 }
 
 class Local32 implements LoadOperandType {

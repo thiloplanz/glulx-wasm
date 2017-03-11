@@ -8,9 +8,13 @@
 
 import {
     g, LoadOperandType, StoreOperandType, Opcode,
-    Constant, GlulxFunction, Return, function_type_no_args,
-    function_type_i32, read_uint16, read_uint32
+    Constant, GlulxFunction, Return, read_uint16, read_uint32
 } from './ast'
+
+import {
+    function_type_i32, function_type_no_args
+} from './vmlib'
+
 
 export class ParseResult<T>{
     constructor(readonly v: T, readonly nextOffset: number) { }
