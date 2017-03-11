@@ -28,3 +28,12 @@ After that come the regions for the managed heap (TODO) and the stack (TODO).
 A little complication occurs when reading values from memory because Glulx uses a big-endian format,
 versus the WASM opcodes expect little-endian. The runtime library provides for conversion functions
 that the compiled code calls into (TODO).
+
+### Global variables
+
+The runtime support library makes use of some WASM global variables to keep track of state:
+
+```
+0:   Stack segment offset, immutable
+1:   Stack pointer, mutable
+```
