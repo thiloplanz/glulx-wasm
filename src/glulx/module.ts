@@ -45,7 +45,9 @@ export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: 
 
     const export_sec = export_section(functions.map(f =>
         export_entry(str_ascii(f.name), external_kind.function, functionIndex[f.address]),
-    ))
+    ).concat(
+        export_entry(str_ascii("memory"), external_kind.memory, zero)
+        ))
 
 
     const data_sec = data_section([data_segment(zero, init_expr([i32_zero]), data(image))])
