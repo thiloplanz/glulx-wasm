@@ -8,7 +8,7 @@
 
 import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module } from '../ast'
 import { uint32 } from '../basic-types'
-import { vmlib_call, function_type_i32 } from './vmlib'
+import { vmlib_call, types } from './vmlib'
 
 export interface TranscodingContext {
     callableFunctions: VarUint32[],
@@ -244,6 +244,6 @@ export const g = {
     jz(condition: LoadOperandType, vector: LoadOperandType): Opcode { return new JumpIfZero(condition, vector) },
 
     function_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
-        return new GlulxFunction(address, name, function_type_i32, false, opcodes)
+        return new GlulxFunction(address, name, types.in_out, false, opcodes)
     }
 }

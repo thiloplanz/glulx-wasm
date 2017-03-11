@@ -12,7 +12,7 @@ import {
 } from './ast'
 
 import {
-    function_type_i32, function_type_no_args
+    types
 } from './vmlib'
 
 
@@ -137,14 +137,14 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
             offset = offset + 3
             let ftype
             if (argType == 0 && argCount == 0) {
-                ftype = function_type_no_args
+                ftype = types.out
             }
             else {
                 if (argType != 4) throw new Error("only 32bit arguments are implemented")
                 if (argCount != 1) throw new Error("only a single function argument is implemented")
                 if (image[offset] != 0) throw new Error("only a single argument group is implemented")
                 offset += 2
-                ftype = function_type_i32
+                ftype = types.in_out
             }
             let opcodes: Opcode[] = []
             while (true) {

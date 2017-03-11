@@ -6,22 +6,26 @@
 // Internal functions to support the runtime
 // These are included in each compiled module
 
-import { c, FunctionBody, GlobalSection, FuncType, I32ops, Op, Void } from '../ast'
+import { c, FunctionBody, GlobalSection, TypeSection, FuncType, I32ops, Op, Void, VarUint32 } from '../ast'
 import { uint32 } from '../basic-types'
 
+export const types = {
+    in_out: c.func_type([c.i32], c.i32),
+    out: c.func_type([], c.i32),
+    in: c.func_type([c.i32]),  // TODO: void does not work yet: https://github.com/rsms/wasm-util/issues/3
+    lookup: type => all_types_indexes[all_types.findIndex(f => f == type)]
+}
 
-export const function_type_i32 = c.func_type([c.i32], c.i32)
-export const function_type_no_args = c.func_type([], c.i32)
-export const function_type_i32_void = c.func_type([c.i32])
+const all_types = [types.in_out, types.out, types.in]
+const all_types_indexes = all_types.map((x, i) => c.varuint32(i))
 
+export const type_section = c.type_section(all_types)
 
 const immutable = c.global_type(c.i32, false)
-
 const mutable = c.global_type(c.i32, true)
-
 const zero = c.i32.const(0)
 
-export function globals(stackStart: uint32) {
+export function global_section(stackStart: uint32) {
     const stack = c.i32.const(stackStart)
     return c.global_section([
         // 0: stack start address
@@ -34,40 +38,32 @@ export function globals(stackStart: uint32) {
 
 const STACK_START = 0
 const STACK_POINTER = 1
-
 const arg0 = c.get_local(c.i32, 0)
 
 const SP = c.get_global(c.i32, STACK_POINTER)
 
 const fourBytes = c.i32.const(4)
 
-
-export const vmlib_function_types = [
-    // push
-    function_type_i32, // TODO: void does not work yet: https://github.com/rsms/wasm-util/issues/3
-    // pop
-    function_type_no_args
-]
-
-
-export const vmlib = [
-
-    // push(value)
-    c.function_body([], [
+const lib = [
+    // push value
+    [types.in_out, c.function_body([], [
         // TODO: check for stack overflow
         c.i32.store(c.align32, SP, arg0),
         c.set_global(STACK_POINTER, c.i32.add(SP, fourBytes)),
-        c.return_(arg0)
-    ]),
-
-    // pop
-    c.function_body([], [
+        c.return_(arg0) // TODO: void does not work yet: https://github.com/rsms/wasm-util/issues/3
+    ])],
+    // value := pop
+    [types.out, c.function_body([], [
         // TODO: check for stack underflow
         c.set_global(STACK_POINTER, c.i32.sub(SP, fourBytes)),
         c.return_(c.i32.load(c.align32, SP))
-    ])
+    ])]
 ]
 
+
+export const vmlib_function_types: FuncType[] = lib.map(f => f[0] as FuncType)
+
+export const vmlib: FunctionBody[] = lib.map(f => f[1] as FunctionBody)
 
 export const vmlib_call = {
     push: function (value): Op<Void> { return c.drop(c.void, c.call(c.i32, c.varuint32(0), [value])) },
