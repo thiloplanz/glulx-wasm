@@ -10,6 +10,9 @@ import { g, GlulxFunction } from '../../../src/glulx/ast'
 import { module } from '../../../src/glulx/module'
 import { BufferedEmitter } from '../../../src/emit'
 import { decodeOpcode, decodeFunction } from '../../../src/glulx/decoder'
+import { DummyGLK } from '../../../src/glulx/glk'
+import { GlulxAccess, VmLibSupport } from '../../../src/glulx/host'
+
 
 let image: Uint8Array
 
@@ -49,7 +52,7 @@ const wasm: Promise<any> = gluxercise.then(cases => {
     const buffer = new ArrayBuffer(1024 * 1024)
     const emitter = new BufferedEmitter(buffer)
     mod.emit(emitter)
-    return WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length))
+    return WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length), { vmlib_support })
 })
 
 
@@ -117,12 +120,20 @@ const cases: any[][] = [
 
 export const tests: any = {}
 
+let glulx: GlulxAccess = null
+
+const vmlib_support: VmLibSupport = {
+    glk(selector, argc) {
+        return glulx.glk(selector, argc)
+    }
+}
 
 declare var WebAssembly: any
 
-
 function runCase(test: Test, name: string, data: any[]) {
     wasm.then(module => {
+        glulx = new GlulxAccess(module.instance, DummyGLK)
+
         const func = module && module.instance && module.instance.exports && module.instance.exports[name]
 
         test.ok(func, "compiled function was found in exports")

@@ -10,6 +10,9 @@ import { g, GlulxFunction } from '../../../src/glulx/ast'
 import { module } from '../../../src/glulx/module'
 import { BufferedEmitter } from '../../../src/emit'
 import { decodeOpcode, decodeFunction } from '../../../src/glulx/decoder'
+import { DummyGLK, OutputBuffer } from '../../../src/glulx/glk'
+import { strRepr } from '../../../src/repr'
+import { VmLibSupport, GlulxAccess } from '../../../src/glulx/host'
 
 declare var WebAssembly: any
 
@@ -66,13 +69,31 @@ const cases: any[] = [
         -1, -2,
         21, 42
     ],
+    [
+        g.function_i32_i32(addr++, "glk_put_char",
+            g.glk.put_char(var0).concat(
+                g.return_(var0)
+            )),
+        65, (test: Test, x) => test.equals(OutputBuffer, "A", "output A"),
+        66, (test: Test, x) => test.equals(OutputBuffer, "AB", "output AB"),
+        67, (test: Test, x) => test.equals(OutputBuffer, "ABC", "output ABC"),
+    ]
 ]
+
+let glulx: GlulxAccess = null
+
+const vmlib_support: VmLibSupport = {
+    glk(selector, argc) {
+        return glulx.glk(selector, argc)
+    }
+}
 
 const mod = module(cases.map(c => c[0]), rom, rom.byteLength, rom.byteLength)
 const buffer = new ArrayBuffer(32000)
 const emitter = new BufferedEmitter(buffer)
 mod.emit(emitter)
-const wasm = WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length))
+
+const wasm = WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length), { vmlib_support })
 
 export const tests: any = {}
 cases.forEach(c => {
@@ -82,13 +103,18 @@ cases.forEach(c => {
 
 function runCase(test: Test, name: string, data: any[]) {
     wasm.then(module => {
+        glulx = new GlulxAccess(module.instance, DummyGLK)
         const func = module && module.instance && module.instance.exports && module.instance.exports[name]
         test.ok(func, "compiled function was found in exports")
         for (let i = 1; i < data.length; i += 2) {
             let input = data[i]
             let expected = data[i + 1]
             let result = func(input)
-            test.equals(result, expected, input + " -> " + expected + ", got " + result)
+            if (expected.call) {
+                expected.call(null, test, result)
+            } else {
+                test.equals(result, expected, input + " -> " + expected + ", got " + result)
+            }
         }
         test.done()
     })

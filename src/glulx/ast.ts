@@ -9,6 +9,7 @@
 import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module } from '../ast'
 import { uint32 } from '../basic-types'
 import { vmlib_call, types } from './vmlib'
+import { GlkSelector } from './host'
 
 export interface TranscodingContext {
     callableFunctions: VarUint32[],
@@ -62,6 +63,15 @@ class Callf implements Opcode {
             return result.transcode(c.call(c.i32, index, args.map(x => x.transcode(context))))
         }
         return c.unreachable /* dynamic calls are not implemented */
+    }
+}
+
+class GlkCall implements Opcode {
+    constructor(private readonly selector: LoadOperandType, private readonly argc: LoadOperandType, private readonly result: StoreOperandType) { }
+    transcode(context: TranscodingContext) {
+        const { selector, argc, result } = this
+        // we pass this out to Javascript to dispatch (and get the parameters from the stack)
+        return result.transcode(vmlib_call.glk(selector.transcode(context), argc.transcode(context)))
     }
 }
 
@@ -237,6 +247,15 @@ export const g = {
     callf(address: LoadOperandType, args: LoadOperandType[], result: StoreOperandType): Opcode {
         if (args.length > 3) throw new Error(`callf does not take more than three arguments, you gave me ${args.length}`)
         return new Callf(address, args, result)
+    },
+
+    glk: {
+        put_char: function (latin1: LoadOperandType) {
+            return [
+                g.copy(latin1, g.push),
+                new GlkCall(g.const_(GlkSelector.put_char), g.const_(1), g.discard)
+            ]
+        }
     },
 
     jump(v: LoadOperandType): Opcode { return new Jump(v) },

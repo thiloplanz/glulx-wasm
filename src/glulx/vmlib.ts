@@ -6,17 +6,21 @@
 // Internal functions to support the runtime
 // These are included in each compiled module
 
-import { c, FunctionBody, GlobalSection, TypeSection, FuncType, I32ops, Op, Void, VarUint32 } from '../ast'
+import {
+    c, FunctionBody, GlobalSection, TypeSection, FuncType, I32ops, Op, Void, VarUint32,
+    ImportEntry, I32, AnyResult
+} from '../ast'
 import { uint32 } from '../basic-types'
 
 export const types = {
+    in_in_out: c.func_type([c.i32, c.i32], c.i32),
     in_out: c.func_type([c.i32], c.i32),
     out: c.func_type([], c.i32),
     in: c.func_type([c.i32]),  // TODO: void does not work yet: https://github.com/rsms/wasm-util/issues/3
-    lookup: type => all_types_indexes[all_types.findIndex(f => f == type)]
+    lookup: (type: FuncType) => all_types_indexes[all_types.findIndex(f => f == type)]
 }
 
-const all_types = [types.in_out, types.out, types.in]
+const all_types = [types.in_out, types.out, types.in, types.in_in_out]
 const all_types_indexes = all_types.map((x, i) => c.varuint32(i))
 
 export const type_section = c.type_section(all_types)
@@ -65,7 +69,24 @@ export const vmlib_function_types: FuncType[] = lib.map(f => f[0] as FuncType)
 
 export const vmlib: FunctionBody[] = lib.map(f => f[1] as FunctionBody)
 
+const imports = c.str_ascii("vmlib_support")
+
+// callbacks the embedding code needs to be provide so that the module
+// can interact with the outside world
+export const vmlib_imports = [
+    c.function_import_entry(imports, c.str_ascii("glk"), types.lookup(types.in_in_out))
+]
+
+
+export const vmlib_function_offset = vmlib_imports.length
+
 export const vmlib_call = {
-    push: function (value): Op<Void> { return c.drop(c.void, c.call(c.i32, c.varuint32(0), [value])) },
-    pop: c.call(c.i32, c.varuint32(1), [])
+    // imports come first
+    glk: function (selector: Op<I32>, argc: Op<I32>): Op<I32> {
+        return c.call(c.i32, c.varuint32(0), [selector, argc])
+    },
+
+    // then our vmlib functions
+    push: function (value): Op<Void> { return c.drop(c.void, c.call(c.i32, c.varuint32(vmlib_function_offset), [value])) },
+    pop: c.call(c.i32, c.varuint32(vmlib_function_offset + 1), []),
 }

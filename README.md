@@ -23,10 +23,10 @@ There is a unit test to look at, which takes an AST with a sequence of Glulx ope
 The Glulx virtual machine memory is mapped directly to the WASM module's default linear memory.
 
 That means that ROM starts at address 0 and RAM starts at the specified RAMSTART.
-After that come the regions for the managed heap (TODO) and the stack (TODO).
+After that come the regions for the managed heap (TODO) and the stack.
 
-A little complication occurs when reading values from memory because Glulx uses a big-endian format,
-versus the WASM opcodes expect little-endian. The runtime library provides for conversion functions
+A little complication occurs when reading values from mapped memory because Glulx uses a big-endian format 
+whereas the WASM opcodes expect little-endian. The runtime library provides for conversion functions
 that the compiled code calls into (TODO).
 
 ### Global variables
