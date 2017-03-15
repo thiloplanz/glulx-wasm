@@ -18,7 +18,13 @@ declare var WebAssembly: any
 
 const var0 = g.localVariable(0)
 
-const rom = new Uint8Array([1, 1, 2, 3, 5, 8, 13, 21, 34, 55])
+const ramStart = 10
+const image = new Uint8Array([
+    // ROM
+    1, 1, 2, 3, 5, 8, 13, 21, 34, 55,
+    // RAM
+    0x42, 0, 0x42, 0, 42, 0, 42, 0
+])
 
 let addr = 0;
 
@@ -50,6 +56,12 @@ const cases: any[] = [
             g.return_(g.memory(0))
         ]),
         0, 0x01010203,  // big endian
+    ],
+    [
+        g.function_i32_i32(addr++, "read from RAM", [
+            g.return_(g.memory(ramStart))
+        ]),
+        0, 0x42004200,  // big endian
     ],
     [
         g.function_i32_i32(addr++, "callf", [
@@ -88,7 +100,7 @@ const vmlib_support: VmLibSupport = {
     }
 }
 
-const mod = module(cases.map(c => c[0]), rom, rom.byteLength, rom.byteLength)
+const mod = module(cases.map(c => c[0]), image, ramStart, image.byteLength)
 const buffer = new ArrayBuffer(32000)
 const emitter = new BufferedEmitter(buffer)
 mod.emit(emitter)

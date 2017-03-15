@@ -28,6 +28,7 @@ export const type_section = c.type_section(all_types)
 const immutable = c.global_type(c.i32, false)
 const mutable = c.global_type(c.i32, true)
 const zero = c.i32.const(0)
+const one = c.i32.const(1)
 
 export function global_section(stackStart: uint32) {
     const stack = c.i32.const(stackStart)
@@ -47,6 +48,9 @@ const arg0 = c.get_local(c.i32, 0)
 const SP = c.get_global(c.i32, STACK_POINTER)
 
 const fourBytes = c.i32.const(4)
+const eightBits = c.i32.const(8)
+const sixteenBits = c.i32.const(16)
+
 
 const lib = [
     // push value
@@ -61,7 +65,20 @@ const lib = [
         // TODO: check for stack underflow
         c.set_global(STACK_POINTER, c.i32.sub(SP, fourBytes)),
         c.return_(c.i32.load(c.align32, SP))
-    ])]
+    ])],
+    // load from memory
+    [types.in_out, c.function_body([], [function () {
+        // TODO: range checking
+        // need to convert between big-endian (Glulx) and little-endian (wasm)
+        const a3 = c.i32.load8_u(c.align8, arg0)
+        const a2 = c.i32.load8_u(c.align8, c.i32.add(arg0, one))
+        const a1 = c.i32.load8_u(c.align8, c.i32.add(arg0, c.i32.const(2)))
+        const a0 = c.i32.load8_u(c.align8, c.i32.add(arg0, c.i32.const(3)))
+
+        return c.i32.add(
+            c.i32.add(c.i32.shl(a1, eightBits), a0),
+            c.i32.shl(c.i32.add(c.i32.shl(a3, eightBits), a2), sixteenBits))
+    }()])]
 ]
 
 
@@ -80,6 +97,7 @@ export const vmlib_imports = [
 
 export const vmlib_function_offset = vmlib_imports.length
 
+
 export const vmlib_call = {
     // imports come first
     glk: function (selector: Op<I32>, argc: Op<I32>): Op<I32> {
@@ -89,4 +107,5 @@ export const vmlib_call = {
     // then our vmlib functions
     push: function (value): Op<Void> { return c.drop(c.void, c.call(c.i32, c.varuint32(vmlib_function_offset), [value])) },
     pop: c.call(c.i32, c.varuint32(vmlib_function_offset + 1), []),
+    read_uint32: function (addr: Op<I32>): Op<I32> { return c.call(c.i32, c.varint32(vmlib_function_offset + 2), [addr]) }
 }

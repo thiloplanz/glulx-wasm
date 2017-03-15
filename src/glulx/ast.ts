@@ -158,8 +158,7 @@ class MemoryAccess implements LoadOperandType {
         if (address < context.ramStart)
             return c.i32.const(read_uint32(context.image, address))
 
-        // TODO: need to convert between big-endian (Glulx) and little-endian (wasm)
-        return c.i32.load(c.align32, c.i32.const(address))
+        return vmlib_call.read_uint32(c.i32.const(address))
     }
 }
 
