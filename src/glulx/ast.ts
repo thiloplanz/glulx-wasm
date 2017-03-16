@@ -151,8 +151,6 @@ export function read_uint32(image: Uint8Array, offset: number) {
 class MemoryAccess implements LoadOperandType {
     constructor(readonly address: uint32) { }
     transcode(context: TranscodingContext): Op<I32> {
-        // TODO range checking
-
         // inline access to ROM 
         const { address } = this
         if (address < context.ramStart)
@@ -163,8 +161,10 @@ class MemoryAccess implements LoadOperandType {
 }
 
 class MemoryStore implements StoreOperandType {
-    constructor(private readonly v: uint32) { }
-    transcode(input: Op<I32>): Op<Void> { throw new Error("MemoryAccess not implemented") }
+    constructor(private readonly addr: uint32) { }
+    transcode(input: Op<I32>): Op<Void> {
+        return vmlib_call.store_uint32(c.i32.const(this.addr), input)
+    }
 }
 
 class RAMAccess implements LoadOperandType {

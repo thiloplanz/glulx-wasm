@@ -64,6 +64,19 @@ const cases: any[] = [
         0, 0x42004200,  // big endian
     ],
     [
+        g.function_i32_i32(addr++, "write to RAM", [
+            g.copy(var0, g.storeToMemory(ramStart)),
+            g.return_(g.memory(ramStart))
+        ]),
+        99, 99,
+        88, (test: Test, x) => {
+            console.info(glulx.getMemory())
+            test.equals(glulx.getMemory()[ramStart], 0, "read updated RAM")
+            test.equals(glulx.getMemory()[ramStart + 3], 88, "read updated RAM")
+            test.equals(x, 88, "return value")
+        }
+    ],
+    [
         g.function_i32_i32(addr++, "callf", [
             g.callf(g.const_(0), [var0], g.setLocalVariable(0)),
             g.return_(var0)

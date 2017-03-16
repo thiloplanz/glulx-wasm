@@ -36,4 +36,6 @@ The runtime support library makes use of some WASM global variables to keep trac
 ```
 0:   Stack segment offset, immutable
 1:   Stack pointer, mutable
+2:   RAMSTART, immutable
+3:   ENDMEM, mutable
 ```
