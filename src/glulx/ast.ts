@@ -110,17 +110,15 @@ class Jump implements Opcode {
     }
 }
 
-class JumpIfZero implements Opcode {
-    constructor(private readonly cond: LoadOperandType, private readonly v: LoadOperandType) { }
+class ConditionalJump implements Opcode {
+    constructor(private readonly comp: ((args: Op<I32>[]) => Op<I32>), private readonly args: LoadOperandType[], private readonly v: LoadOperandType) { }
     transcode(context) {
-        const { cond, v } = this
+        const { comp, args, v } = this
         const jump = new Jump(v).transcode(context)
-        // (premature) optimization for constant condition
-        if (cond instanceof Constant) {
-            if (cond.v == 0) return jump
-            return c.nop
-        }
-        return c.if_(c.void, c.i32.eqz(cond.transcode(context)), [jump])
+        const _args = args.map(x => x.transcode(context))
+        const x = c.if_(c.void, comp.apply(null, _args), [jump])
+        console.info(x)
+        return x
     }
 }
 
@@ -206,6 +204,10 @@ const pop: LoadOperandType = new Pop
 
 const push: StoreOperandType = new Push
 
+const _jz = c.i32.eqz.bind(c.i32)
+
+const _jne = c.i32.ne.bind(c.i32)
+
 export const g = {
     const_(v: uint32): Constant { return new Constant(v) },
 
@@ -259,7 +261,13 @@ export const g = {
 
     jump(v: LoadOperandType): Opcode { return new Jump(v) },
 
-    jz(condition: LoadOperandType, vector: LoadOperandType): Opcode { return new JumpIfZero(condition, vector) },
+    jz(condition: LoadOperandType, vector: LoadOperandType): Opcode {
+        return new ConditionalJump(_jz, [condition], vector)
+    },
+
+    jne(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+        return new ConditionalJump(_jne, [a, b], vector)
+    },
 
     function_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
         return new GlulxFunction(address, name, types.in_out, false, opcodes)

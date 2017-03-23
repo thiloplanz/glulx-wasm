@@ -52,6 +52,16 @@ const cases: any[] = [
         42, 42
     ],
     [
+        g.function_i32_i32(addr++, "jne", [
+            g.jne(g.const_(2), var0, g.const_(1)),
+            g.return_(var0)
+        ]),
+        42, 1,
+        1, 1,
+        2, 2,
+        3, 1
+    ],
+    [
         g.function_i32_i32(addr++, "read from ROM", [
             g.return_(g.memory(0))
         ]),
@@ -70,7 +80,6 @@ const cases: any[] = [
         ]),
         99, 99,
         88, (test: Test, x) => {
-            console.info(glulx.getMemory())
             test.equals(glulx.getMemory()[ramStart], 0, "read updated RAM")
             test.equals(glulx.getMemory()[ramStart + 3], 88, "read updated RAM")
             test.equals(x, 88, "return value")
