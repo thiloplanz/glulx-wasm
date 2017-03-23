@@ -122,6 +122,7 @@ const cases: any[] = [
         9, (test: Test, x) => checkOutput(test, "9"),
         10, (test: Test, x) => checkOutput(test, "10"),
         -1, (test: Test, x) => checkOutput(test, "-1"),
+        1234, (test: Test, x) => checkOutput(test, "1234"),
     ]
 ]
 

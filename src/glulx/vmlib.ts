@@ -72,6 +72,11 @@ const eightBits = c.i32.const(8)
 const sixteenBits = c.i32.const(16)
 const twentyFourBits = c.i32.const(24)
 
+const put_char = c.i32.const(GlkSelector.put_char)
+const minus = c.i32.const("-".charCodeAt(0))
+const ten = c.i32.const(10)
+
+
 const lib = [
     // 0: push value
     [types.in_out, c.function_body([], [
@@ -124,15 +129,37 @@ const lib = [
     }())],
     // 4: streamnum
     [types.in_out, c.function_body([],
-        ([
-            // TODO: properly convert numbers outside of 0 .. 9
-            push_(c.i32.add(arg0, c.i32.const("0".charCodeAt(0)))),
+        [
+            // argument is treated as a signed integer
+
             // TODO: need to check IO system mode, don't assume GLK
-            glk_call(c.i32.const(GlkSelector.put_char), one)
-        ])
+
+            // negative ?
+            c.if(c.void, c.i32.lt_s(arg0, zero), [
+                glk_void_call_with_args(put_char, [minus]),
+                c.set_local(0, c.i32.sub(zero, arg0))
+            ]) as Op<AnyResult>,
+
+            // recurse if more than one digit
+            c.if(c.void, c.i32.ge_u(arg0, ten),
+                [
+                    streamnum(c.i32.div_u(arg0, ten)),
+                ]
+            ),
+
+
+            // write a single digit
+            glk_void_call_with_args(put_char, [
+                c.i32.add(c.i32.rem_u(arg0, ten), c.i32.const("0".charCodeAt(0)))
+            ]),
+
+            arg0 // dummy return, because "void" does not work yet
+
+        ]
     )
     ]
 ]
+
 
 
 export const vmlib_function_types: FuncType[] = lib.map(f => f[0] as FuncType)
@@ -153,8 +180,23 @@ function glk_call(selector: Op<I32>, argc: Op<I32>): Op<I32> {
     return c.call(c.i32, c.varuint32(0), [selector, argc])
 }
 
+function glk_call_with_args(selector: Op<I32>, args: Op<I32>[]): Op<AnyResult>[] {
+    return args.map(x => push_(x) as any).concat(glk_call(selector, c.i32.const(args.length)))
+}
+
+function glk_void_call_with_args(selector: Op<I32>, args: Op<I32>[]): Op<Void> {
+    return c.void_block(
+        args.map(x => push_(x))
+            .concat(c.drop(c.void, glk_call(selector, c.i32.const(args.length)))))
+}
+
+
 function push_(value: Op<I32>): Op<Void> {
     return c.drop(c.void, vmlib_function_call(0, [value]))
+}
+
+function streamnum(num: Op<I32>): Op<Void> {
+    return c.drop(c.void, vmlib_function_call(4, [num]))
 }
 
 export const vmlib_call = {
@@ -167,6 +209,6 @@ export const vmlib_call = {
     read_uint32: function (addr: Op<I32>): Op<I32> { return vmlib_function_call(2, [addr]) },
     store_uint32: function (addr: Op<I32>, v: Op<I32>): Op<Void> { return c.drop(c.void, vmlib_function_call(3, [addr, v])) },
 
-    streamnum: function (num: Op<I32>): Op<Void> { return c.drop(c.void, vmlib_function_call(4, [num])) }
+    streamnum
 
 }
