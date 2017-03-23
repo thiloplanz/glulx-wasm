@@ -10,7 +10,7 @@ import { g, GlulxFunction } from '../../../src/glulx/ast'
 import { module } from '../../../src/glulx/module'
 import { BufferedEmitter } from '../../../src/emit'
 import { decodeOpcode, decodeFunction } from '../../../src/glulx/decoder'
-import { DummyGLK, OutputBuffer } from '../../../src/glulx/glk'
+import { DummyGLK, OutputBuffer, ClearOutputBuffer } from '../../../src/glulx/glk'
 import { strRepr } from '../../../src/repr'
 import { VmLibSupport, GlulxAccess } from '../../../src/glulx/host'
 
@@ -108,11 +108,29 @@ const cases: any[] = [
             g.glk.put_char(var0).concat(
                 g.return_(var0)
             )),
-        65, (test: Test, x) => test.equals(OutputBuffer, "A", "output A"),
-        66, (test: Test, x) => test.equals(OutputBuffer, "AB", "output AB"),
-        67, (test: Test, x) => test.equals(OutputBuffer, "ABC", "output ABC"),
+        65, (test: Test, x) => checkOutput(test, "A"),
+        66, (test: Test, x) => checkOutput(test, "B"),
+        67, (test: Test, x) => checkOutput(test, "C")
+    ],
+    [
+        g.function_i32_i32(addr++, "streamnum", [
+            g.streamnum(var0),
+            g.return_(var0)
+        ]),
+        0, (test: Test, x) => checkOutput(test, "0"),
+        1, (test: Test, x) => checkOutput(test, "1"),
+        9, (test: Test, x) => checkOutput(test, "9"),
+        10, (test: Test, x) => checkOutput(test, "10"),
+        -1, (test: Test, x) => checkOutput(test, "-1"),
     ]
 ]
+
+function checkOutput(test: Test, expected: string) {
+    if (expected != OutputBuffer) {
+        console.error("unexpected OutputBuffer", expected, OutputBuffer)
+    }
+    test.equals(OutputBuffer, expected, "Output " + expected)
+}
 
 let glulx: GlulxAccess = null
 
@@ -143,6 +161,7 @@ function runCase(test: Test, name: string, data: any[]) {
         for (let i = 1; i < data.length; i += 2) {
             let input = data[i]
             let expected = data[i + 1]
+            ClearOutputBuffer()
             let result = func(input)
             if (expected.call) {
                 expected.call(null, test, result)

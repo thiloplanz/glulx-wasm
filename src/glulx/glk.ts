@@ -16,5 +16,7 @@ export const DummyGLK: GLK = {
     }
 }
 
+export function ClearOutputBuffer() { OutputBuffer = "" }
+
 
 

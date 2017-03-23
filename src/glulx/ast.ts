@@ -6,7 +6,7 @@
 
 // AST for Glulx functions
 
-import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module } from '../ast'
+import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module, AnyResult } from '../ast'
 import { uint32 } from '../basic-types'
 import { vmlib_call, types } from './vmlib'
 import { GlkSelector } from './host'
@@ -75,6 +75,19 @@ class GlkCall implements Opcode {
     }
 }
 
+class VmLibCall implements Opcode {
+    constructor(private readonly call: (...args: Op<I32>[]) => Op<AnyResult>, private readonly args: LoadOperandType[], private readonly result: StoreOperandType) { }
+    transcode(context: TranscodingContext) {
+        const args = this.args.map(x => x.transcode(context))
+        if (this.result == null) {
+            // for "void" functions
+            return this.call.apply(null, args)
+        } else {
+            return this.result.transcode(this.call.apply(null, args))
+        }
+    }
+}
+
 const zero = c.i32.const(0)
 const one = c.i32.const(1)
 const two = c.i32.const(2)
@@ -117,7 +130,6 @@ class ConditionalJump implements Opcode {
         const jump = new Jump(v).transcode(context)
         const _args = args.map(x => x.transcode(context))
         const x = c.if_(c.void, comp.apply(null, _args), [jump])
-        console.info(x)
         return x
     }
 }
@@ -256,8 +268,11 @@ export const g = {
                 g.copy(latin1, g.push),
                 new GlkCall(g.const_(GlkSelector.put_char), g.const_(1), g.discard)
             ]
-        }
+        },
+
     },
+
+    streamnum(n: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.streamnum, [n], null) },
 
     jump(v: LoadOperandType): Opcode { return new Jump(v) },
 
