@@ -168,9 +168,10 @@ function runCase(test: Test, name: string, data: any[]) {
         test.ok(func, "compiled function was found in exports")
         for (let i = 1; i < data.length; i += 2) {
             let input = data[i]
+            if (!input.slice) input = [input]
             let expected = data[i + 1]
             ClearOutputBuffer()
-            let result = func(input)
+            let result = func.apply(null, input)
             if (expected.call) {
                 expected.call(null, test, result)
             } else {

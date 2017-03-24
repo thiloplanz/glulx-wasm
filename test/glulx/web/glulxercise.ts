@@ -10,7 +10,7 @@ import { g, GlulxFunction } from '../../../src/glulx/ast'
 import { module } from '../../../src/glulx/module'
 import { BufferedEmitter } from '../../../src/emit'
 import { decodeOpcode, decodeFunction } from '../../../src/glulx/decoder'
-import { DummyGLK } from '../../../src/glulx/glk'
+import { DummyGLK, OutputBuffer, ClearOutputBuffer } from '../../../src/glulx/glk'
 import { GlulxAccess, VmLibSupport } from '../../../src/glulx/host'
 
 
@@ -114,9 +114,21 @@ const cases: any[][] = [
         42, 99
     ],
 
+    [
+        "_0x00009cbd__streamchar",
+        gluxercise => decodeFunction(gluxercise, 0x9cbd).v,
+        0, (test: Test, x) => checkOutput(test, "#."),
+    ],
 
 ]
 
+
+function checkOutput(test: Test, expected: string) {
+    if (expected != OutputBuffer) {
+        console.error("unexpected OutputBuffer", expected, OutputBuffer)
+    }
+    test.equals(OutputBuffer, expected, "Output " + expected)
+}
 
 export const tests: any = {}
 
@@ -139,10 +151,16 @@ function runCase(test: Test, name: string, data: any[]) {
         test.ok(func, "compiled function was found in exports")
         if (func) for (let i = 1; i < data.length; i += 2) {
             let input = data[i]
+            if (!input.slice) input = [input]
+            ClearOutputBuffer()
             let expected = data[i + 1]
             try {
-                let result = func(input)
+                let result = func.apply(null, input)
+                if (expected.call) {
+                    expected.call(null, test, result)
+                } else {
                 test.equals(result, expected, input + " -> " + expected + ", got " + result)
+            }
             }
             catch (e) {
                 test.ifError(e)

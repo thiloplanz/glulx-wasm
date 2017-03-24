@@ -279,6 +279,8 @@ export const g = {
 
     },
 
+    streamchar(n: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.streamchar, [n], null) },
+
     streamnum(n: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.streamnum, [n], null) },
 
     jump(v: LoadOperandType): Opcode { return new Jump(v) },

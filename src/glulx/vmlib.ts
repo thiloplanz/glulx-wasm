@@ -157,6 +157,27 @@ const lib = [
 
         ]
     )
+    ],
+    // 5: stream_buffer (offset, length)
+    [types.in_in_out, c.function_body([],
+        [
+            // TODO: need to check IO system mode, don't assume GLK
+            glk_void_call_with_args(c.i32.const(GlkSelector.put_buffer), [arg0, arg1]),
+
+            arg0 // dummy return, because "void" does not work yet
+
+        ]
+    )
+    ],
+    // 6: streamchar
+    [types.in_out, c.function_body([],
+        [
+            // TODO: need to check IO system mode, don't assume GLK
+            glk_void_call_with_args(c.i32.const(GlkSelector.put_char), [arg0]),
+
+            arg0 // dummy return, because "void" does not work yet
+        ]
+    )
     ]
 ]
 
@@ -209,6 +230,10 @@ export const vmlib_call = {
     read_uint32: function (addr: Op<I32>): Op<I32> { return vmlib_function_call(2, [addr]) },
     store_uint32: function (addr: Op<I32>, v: Op<I32>): Op<Void> { return c.drop(c.void, vmlib_function_call(3, [addr, v])) },
 
-    streamnum
+    streamchar: function (latin1: Op<I32>) { return c.drop(c.void, vmlib_function_call(6, [latin1])) },
+
+    streamnum,
+
+    stream_buffer: function (offset: Op<I32>, length: Op<I32>) { return c.drop(c.void, vmlib_function_call(5, [offset, length])) }
 
 }
