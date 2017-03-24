@@ -13,12 +13,17 @@ export interface VmLibSupport {
     glk(selector: uint32, argc: uint32): uint32
 }
 
+/**
+ * All these functions will be called with `this` set to the GlulxAccess instance
+ */
 export interface GLK {
-    put_char(latin1: number);
+    put_char(latin1: uint32);
+    put_buffer(offset: uint32, length: uint32);
 }
 
 export const enum GlkSelector {
-    put_char = 0x80
+    put_char = 0x80,
+    put_buffer = 0x84
 }
 
 
@@ -41,7 +46,9 @@ export class GlulxAccess {
     glk(selector, argc): uint32 {
         switch (selector) {
             case GlkSelector.put_char:
-                return this._glk.put_char(this.popFunctionArgumentsFromStack(1)[0] & 0xFF)
+                return this._glk.put_char.call(this, this.popFunctionArgumentsFromStack(1)[0] & 0xFF)
+            case GlkSelector.put_buffer:
+                return this._glk.put_buffer.apply(this, this.popFunctionArgumentsFromStack(2))
             default:
                 console.error(`unknown GLK selector ${selector}`)
                 return 0

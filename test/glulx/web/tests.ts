@@ -113,6 +113,13 @@ const cases: any[] = [
         67, (test: Test, x) => checkOutput(test, "C")
     ],
     [
+        g.function_i32_i32(addr++, "glk_put_buffer",
+            g.glk.put_buffer(var0, g.const_(2)).concat(
+                g.return_(var0)
+            )),
+        8, (test: Test, x) => checkOutput(test, '"7')
+    ],
+    [
         g.function_i32_i32(addr++, "streamnum", [
             g.streamnum(var0),
             g.return_(var0)

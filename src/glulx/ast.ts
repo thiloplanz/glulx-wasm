@@ -269,6 +269,13 @@ export const g = {
                 new GlkCall(g.const_(GlkSelector.put_char), g.const_(1), g.discard)
             ]
         },
+        put_buffer: function (offset: LoadOperandType, length: LoadOperandType) {
+            return [
+                g.copy(length, g.push),
+                g.copy(offset, g.push),
+                new GlkCall(g.const_(GlkSelector.put_buffer), g.const_(2), g.discard)
+            ]
+        }
 
     },
 

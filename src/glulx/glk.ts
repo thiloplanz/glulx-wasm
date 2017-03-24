@@ -5,14 +5,23 @@
 
 // A dummy GLK implementation
 
-import { GLK, VmLibSupport, GlkSelector } from './host'
+import { GLK, VmLibSupport, GlkSelector, GlulxAccess } from './host'
 
 export let OutputBuffer = ""
+
+declare const TextDecoder: any
+
+const latin1decoder = new TextDecoder("latin1")
 
 export const DummyGLK: GLK = {
 
     put_char: function (latin1) {
         OutputBuffer += String.fromCharCode(latin1)
+    },
+
+    put_buffer: function (offset, length) {
+        const glulx = this as GlulxAccess
+        OutputBuffer += latin1decoder.decode(glulx.getMemory().subarray(offset, offset + length))
     }
 }
 
