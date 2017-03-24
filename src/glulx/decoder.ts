@@ -161,10 +161,16 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
             }
             else {
                 if (argType != 4) throw new Error("only 32bit arguments are implemented")
-                if (argCount != 1) throw new Error("only a single function argument is implemented")
+                if (argCount != 1)
                 if (image[offset] != 0) throw new Error("only a single argument group is implemented")
                 offset += 2
-                ftype = types.in_out
+                switch (argCount) {
+                    case 0: ftype = types.out; break;
+                    case 1: ftype = types.in_out; break;
+                    case 2: ftype = types.in_in_out; break;
+                    default: throw new Error("unsupported number of arguments: " + argCount)
+                }
+
             }
             let opcodes: Opcode[] = []
             while (true) {
