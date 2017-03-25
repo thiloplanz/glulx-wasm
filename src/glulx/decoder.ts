@@ -8,16 +8,35 @@
 
 import {
     g, LoadOperandType, StoreOperandType, Opcode,
-    Constant, GlulxFunction, Return, read_uint16, read_uint32
+    Constant, GlulxFunction, Return, read_uint16, read_uint32,
+    ConditionalJump, TranscodingContext
 } from './ast'
 
 import {
     types
 } from './vmlib'
 
+import {
+    c, AnyOp
+} from '../ast'
+
 
 export class ParseResult<T>{
     constructor(readonly v: T, readonly nextOffset: number) { }
+}
+
+// we try to avoid decoding conditional jumps directly
+// instead, we try to detect patterns like loops or if/then/else
+class IfThenElse implements Opcode {
+    constructor(readonly cond: ConditionalJump, readonly thenBlock: Opcode[], readonly elseBlock: Opcode[]) { }
+    transcode(context: TranscodingContext) {
+        let cond = this.cond.transcodeCondition(context)
+        return c.if(c.void,
+            cond,
+            (this.thenBlock.length == 0) ? [c.nop] : this.thenBlock.map(x => x.transcode(context)),
+            this.elseBlock.map(x => x.transcode(context))
+        )
+    }
 }
 
 const uint16 = read_uint16
@@ -142,6 +161,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x71: // streamnum
             sig = decodeFunctionSignature_in(image, offset + 1)
             return new ParseResult(g.streamnum(sig.a), sig.nextOffset)
+        case 0x72: // streamstr
+            sig = decodeFunctionSignature_in(image, offset + 1)
+            return new ParseResult(g.streamstr(sig.a), sig.nextOffset)
         default:
             throw new Error(`unknown opcode ${opcode} at ${offset}`)
     }
@@ -162,7 +184,7 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
             else {
                 if (argType != 4) throw new Error("only 32bit arguments are implemented")
                 if (argCount != 1)
-                if (image[offset] != 0) throw new Error("only a single argument group is implemented")
+                    if (image[offset] != 0) throw new Error("only a single argument group is implemented")
                 offset += 2
                 switch (argCount) {
                     case 0: ftype = types.out; break;
@@ -175,6 +197,39 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
             let opcodes: Opcode[] = []
             while (true) {
                 let opcode = decodeOpcode(image, offset)
+                if (opcode.v instanceof ConditionalJump) {
+                    // try to detect common jump pattern
+                    let jumpOpcode;
+                    let vector = opcode.v.vector
+                    if (vector instanceof Constant) {
+                        let jump = vector.v
+                        if (jump >= 0) {
+                            if (jump < 3) {
+                                // return or nop
+                                jumpOpcode = opcode.v
+                            } else {
+                                // if/then/else ?
+                                let elseOffset = opcode.nextOffset
+                                let thenOffset = elseOffset
+                                let elsePart = []
+                                while (true) {
+                                    let elseOp = decodeOpcode(image, thenOffset)
+                                    elsePart.push(elseOp.v)
+                                    thenOffset = elseOp.nextOffset
+                                    if (elseOp.v instanceof Return) {
+                                        // TODO: have a thenPart, don't just fall through
+                                        jumpOpcode = new IfThenElse(opcode.v, [], elsePart)
+                                        opcode = { v: jumpOpcode, nextOffset: thenOffset }
+                                        break
+                                    }
+                                }
+
+                            }
+                        }
+
+                    }
+                    if (!jumpOpcode) console.warn(`got a conditional jump at ${offset}, but did not detect a common pattern`)
+                }
                 opcodes.push(opcode.v)
                 offset = opcode.nextOffset
                 if (opcode.v instanceof Return) {

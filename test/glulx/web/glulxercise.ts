@@ -117,17 +117,32 @@ const cases: any[][] = [
     [
         "_0x00009cbd__streamchar",
         gluxercise => decodeFunction(gluxercise, 0x9cbd).v,
-        0, (test: Test, x) => checkOutput(test, "#."),
+        0, (test: Test, x) => checkOutput(test, "#.", x, 1),
     ],
+
+    [
+        "_0x00000e52__streamstr",
+        gluxercise => decodeFunction(gluxercise, 0x0e52).v,
+        [], (test: Test, x) => checkOutput(test, "A proper E1 string", x, 1),
+    ],
+    [
+        "_0x0000097f__if_then_else_return",
+        gluxercise => decodeFunction(gluxercise, 0x097f).v,
+        [0, 0], (test: Test, x) => checkOutput(test, "0", x, 1),
+        [1, 1], (test: Test, x) => checkOutput(test, "1", x, 1),
+        [2, 3], (test: Test, x) => checkOutput(test, "A proper E1 string", x, 0),
+    ]
+
 
 ]
 
 
-function checkOutput(test: Test, expected: string) {
+function checkOutput(test: Test, expected: string, returnValue: number, expectedReturnValue: number) {
     if (expected != OutputBuffer) {
         console.error("unexpected OutputBuffer", expected, OutputBuffer)
     }
     test.equals(OutputBuffer, expected, "Output " + expected)
+    test.equals(returnValue, expectedReturnValue, "Return value: " + returnValue + ", expected " + expectedReturnValue)
 }
 
 export const tests: any = {}
@@ -159,8 +174,8 @@ function runCase(test: Test, name: string, data: any[]) {
                 if (expected.call) {
                     expected.call(null, test, result)
                 } else {
-                test.equals(result, expected, input + " -> " + expected + ", got " + result)
-            }
+                    test.equals(result, expected, input + " -> " + expected + ", got " + result)
+                }
             }
             catch (e) {
                 test.ifError(e)

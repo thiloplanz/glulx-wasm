@@ -6,7 +6,7 @@
 
 // AST for Glulx functions
 
-import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module, AnyResult } from '../ast'
+import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module, AnyResult, AnyOp } from '../ast'
 import { uint32 } from '../basic-types'
 import { vmlib_call, types } from './vmlib'
 import { GlkSelector } from './host'
@@ -23,7 +23,7 @@ export interface Transcodable {
 }
 
 export interface Opcode extends Transcodable {
-
+    transcode(context: TranscodingContext): AnyOp
 }
 
 export interface LoadOperandType extends Transcodable {
@@ -31,7 +31,7 @@ export interface LoadOperandType extends Transcodable {
 }
 
 export interface StoreOperandType {
-    transcode(input: Op<I32>): Op<Void>
+    transcode(context: TranscodingContext, input: Op<I32>): Op<Void>
 }
 
 export class GlulxFunction {
@@ -60,7 +60,7 @@ class Callf implements Opcode {
                 console.error(`unknown function being called: ${address}`)
                 return c.unreachable
             }
-            return result.transcode(c.call(c.i32, index, args.map(x => x.transcode(context))))
+            return result.transcode(context, c.call(c.i32, index, args.map(x => x.transcode(context))))
         }
         return c.unreachable /* dynamic calls are not implemented */
     }
@@ -71,7 +71,7 @@ class GlkCall implements Opcode {
     transcode(context: TranscodingContext) {
         const { selector, argc, result } = this
         // we pass this out to Javascript to dispatch (and get the parameters from the stack)
-        return result.transcode(vmlib_call.glk(selector.transcode(context), argc.transcode(context)))
+        return result.transcode(context, vmlib_call.glk(selector.transcode(context), argc.transcode(context)))
     }
 }
 
@@ -83,7 +83,7 @@ class VmLibCall implements Opcode {
             // for "void" functions
             return this.call.apply(null, args)
         } else {
-            return this.result.transcode(this.call.apply(null, args))
+            return this.result.transcode(context, this.call.apply(null, args))
         }
     }
 }
@@ -123,25 +123,57 @@ class Jump implements Opcode {
     }
 }
 
-class ConditionalJump implements Opcode {
-    constructor(private readonly comp: ((args: Op<I32>[]) => Op<I32>), private readonly args: LoadOperandType[], private readonly v: LoadOperandType) { }
+export class ConditionalJump implements Opcode {
+    constructor(private readonly comp: ((args: Op<I32>[]) => Op<I32>), private readonly args: LoadOperandType[], readonly vector: LoadOperandType) { }
     transcode(context) {
-        const { comp, args, v } = this
-        const jump = new Jump(v).transcode(context)
-        const _args = args.map(x => x.transcode(context))
-        const x = c.if_(c.void, comp.apply(null, _args), [jump])
+        const { vector } = this
+        const cond = this.transcodeCondition(context)
+        const jump = new Jump(vector).transcode(context)
+        const x = c.if_(c.void, cond, [jump])
         return x
+    }
+    transcodeCondition(context): Op<I32> {
+        const { comp, args, vector } = this
+        const _args = args.map(x => x.transcode(context))
+        return comp.apply(null, _args)
     }
 }
 
 class Add implements Opcode {
     constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
-    transcode(context) { return this.x.transcode(c.i32.add(this.a.transcode(context), this.b.transcode(context))) }
+    transcode(context) { return this.x.transcode(context, c.i32.add(this.a.transcode(context), this.b.transcode(context))) }
 }
 
 class Copy implements Opcode {
     constructor(private readonly a: LoadOperandType, private readonly x: StoreOperandType) { }
-    transcode(context) { return this.x.transcode(this.a.transcode(context)) }
+    transcode(context) { return this.x.transcode(context, this.a.transcode(context)) }
+}
+
+class StreamStr implements Opcode {
+    constructor(private readonly addr: LoadOperandType) { }
+    transcode(context: TranscodingContext) {
+        const { addr } = this
+        if (addr instanceof Constant) {
+            // inline access to Strings that are completely in ROM
+            if (addr.v < context.ramStart) {
+                const type = context.image[addr.v]
+                switch (type) {
+                    case 0xE0:
+                        let end = addr.v + 1
+                        while (context.image[end] > 0) end++
+                        let length = end - addr.v - 1
+                        if (length == 0) return c.nop
+                        if (end <= context.ramStart) return vmlib_call.stream_buffer(c.i32.const(addr.v + 1), c.i32.const(length))
+                        break;
+                    case 0xE1:
+                        console.error("faking E1 string at " + addr.v)
+                        return vmlib_call.streamchar(c.i32.const('?'.charCodeAt(0)))
+                    default: throw new Error("unsupported String type " + type)
+                }
+            }
+        }
+        throw new Error("dynamic or RAM streamstr not yet implemented")
+    }
 }
 
 export class Constant implements LoadOperandType {
@@ -172,19 +204,23 @@ class MemoryAccess implements LoadOperandType {
 
 class MemoryStore implements StoreOperandType {
     constructor(private readonly addr: uint32) { }
-    transcode(input: Op<I32>): Op<Void> {
+    transcode(context: TranscodingContext, input: Op<I32>): Op<Void> {
         return vmlib_call.store_uint32(c.i32.const(this.addr), input)
     }
 }
 
 class RAMAccess implements LoadOperandType {
     constructor(readonly address: uint32) { }
-    transcode(): Op<I32> { throw new Error("MemoryAccess not implemented") }
+    transcode(context: TranscodingContext): Op<I32> {
+        return vmlib_call.read_uint32(c.i32.const(this.address + context.ramStart))
+    }
 }
 
 class RAMStore implements StoreOperandType {
-    constructor(private readonly v: uint32) { }
-    transcode(input: Op<I32>): Op<Void> { throw new Error("MemoryAccess not implemented") }
+    constructor(private readonly address: uint32) { }
+    transcode(context: TranscodingContext, input: Op<I32>): Op<Void> {
+        return vmlib_call.store_uint32(c.i32.const(this.address + context.ramStart), input)
+    }
 }
 
 class Pop implements LoadOperandType {
@@ -192,7 +228,7 @@ class Pop implements LoadOperandType {
 }
 
 class Push implements StoreOperandType {
-    transcode(input: Op<I32>): Op<Void> { return vmlib_call.push(input) }
+    transcode(context: TranscodingContext, input: Op<I32>): Op<Void> { return vmlib_call.push(input) }
 }
 
 class Local32 implements LoadOperandType {
@@ -202,11 +238,11 @@ class Local32 implements LoadOperandType {
 
 class StoreLocal32 implements StoreOperandType {
     constructor(private readonly v: uint32) { }
-    transcode(input: Op<I32>) { return c.set_local(this.v, input) }
+    transcode(context: TranscodingContext, input: Op<I32>) { return c.set_local(this.v, input) }
 }
 
 class Discard implements StoreOperandType {
-    transcode(input: Op<I32>) { return c.drop(c.void_, input) }
+    transcode(context: TranscodingContext, input: Op<I32>) { return c.drop(c.void_, input) }
 }
 
 
@@ -282,6 +318,8 @@ export const g = {
     streamchar(n: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.streamchar, [n], null) },
 
     streamnum(n: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.streamnum, [n], null) },
+
+    streamstr(addr: LoadOperandType): Opcode { return new StreamStr(addr) },
 
     jump(v: LoadOperandType): Opcode { return new Jump(v) },
 
