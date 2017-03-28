@@ -9,7 +9,7 @@
 import {
     g, LoadOperandType, StoreOperandType, Opcode,
     Constant, GlulxFunction, Return, read_uint16, read_uint32,
-    ConditionalJump, TranscodingContext
+    Jump, ConditionalJump, TranscodingContext
 } from './ast'
 
 import {
@@ -169,8 +169,27 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
     }
 }
 
+// decodes a sequence of opcodes until either a Return or Jump is reached
+// or the endOffset is reached
+function decodeOpcodes(image: Uint8Array, offset: number, endOffset: number): ParseResult<Opcode[]> {
+    let opcodes: Opcode[] = []
+    while (offset < endOffset) {
+        let opcode = decodeOpcode(image, offset)
+        opcode.v.offset = offset
+        opcodes.push(opcode.v)
+        offset = opcode.nextOffset
+        if (opcode.v instanceof Return) {
+            break
+        }
+    }
+    return new ParseResult(opcodes, offset);
+}
+
+const THE_END = 0xFFFFFFFF
+
 export function decodeFunction(image: Uint8Array, offset: number, name?: string): ParseResult<GlulxFunction> {
     const callType = image[offset]
+    const funcOffset = offset
     switch (callType) {
         case 0xC0: throw new Error("stack-called functions are not implemented")
         case 0xC1:
@@ -194,50 +213,47 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
                 }
 
             }
-            let opcodes: Opcode[] = []
-            while (true) {
-                let opcode = decodeOpcode(image, offset)
-                if (opcode.v instanceof ConditionalJump) {
-                    // try to detect common jump pattern
-                    let jumpOpcode;
-                    let vector = opcode.v.vector
-                    if (vector instanceof Constant) {
-                        let jump = vector.v
-                        if (jump >= 0) {
-                            if (jump < 3) {
-                                // return or nop
-                                jumpOpcode = opcode.v
-                            } else {
-                                // if/then/else ?
-                                let elseOffset = opcode.nextOffset
-                                let thenOffset = elseOffset
-                                let elsePart = []
-                                while (true) {
-                                    let elseOp = decodeOpcode(image, thenOffset)
-                                    elsePart.push(elseOp.v)
-                                    thenOffset = elseOp.nextOffset
-                                    if (elseOp.v instanceof Return) {
-                                        // TODO: have a thenPart, don't just fall through
-                                        jumpOpcode = new IfThenElse(opcode.v, [], elsePart)
-                                        opcode = { v: jumpOpcode, nextOffset: thenOffset }
-                                        break
-                                    }
-                                }
-
-                            }
-                        }
-
-                    }
-                    if (!jumpOpcode) console.warn(`got a conditional jump at ${offset}, but did not detect a common pattern`)
+            let bodyStart = decodeOpcodes(image, offset, THE_END)
+            // if there are no conditional jumps in there and it ends with a return, we are good
+            let condJump = bodyStart.v.find(op => op instanceof ConditionalJump) as ConditionalJump
+            let lastOp = bodyStart.v[bodyStart.v.length - 1]
+            if (!condJump) {
+                if (lastOp instanceof Return) {
+                    return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
+                        ftype, false, bodyStart.v), bodyStart.nextOffset)
                 }
-                opcodes.push(opcode.v)
-                offset = opcode.nextOffset
-                if (opcode.v instanceof Return) {
-                    break
+                throw new Error("function body does not end in Return")
+            }
+
+            console.info("got a conditional jump!", condJump, funcOffset)
+            // if there was a conditional jump, everything after it is actually the "else"
+            let vector = condJump.vector
+            if (vector instanceof Constant) {
+                let jump = vector.v
+                if (jump >= 0) {
+                    if (jump < 3) {
+                        // return or nop
+                        return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
+                            ftype, false, bodyStart.v), bodyStart.nextOffset)
+                    }
+                    // if/then/else ?
+                    // does the jump go after the already parse opcodes? That would be "then"
+                    const indexOfJump = bodyStart.v.indexOf(condJump)
+                    const condJumpNextOffset = bodyStart.v[indexOfJump + 1].offset
+                    if (jump + condJumpNextOffset - 2 >= bodyStart.nextOffset) {
+                        let thenBlock = decodeOpcodes(image, jump + condJumpNextOffset - 2, THE_END)
+                        let elseBlock = bodyStart.v.slice(indexOfJump + 1)
+                        console.info(indexOfJump, elseBlock)
+                        bodyStart.v[indexOfJump] = new IfThenElse(condJump, thenBlock.v, elseBlock)
+                        // TODO: recursively also check for more nested conditionals
+                        const dummyReturnNeeded = g.return_(g.const_(98))  // FF can do without? Chrome needs it?
+                        return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
+                            ftype, false, bodyStart.v.slice(0, indexOfJump + 1).concat(dummyReturnNeeded)), bodyStart.nextOffset)
+                    }
                 }
             }
-            return new ParseResult(
-                new GlulxFunction(offset, name || ("_" + offset.toString()),
-                    ftype, false, opcodes), offset)
+
+            console.error("got a conditional jump, but did not detect a common pattern", condJump)
+            throw new Error("got a conditional jump, but did not detect a common pattern")
     }
 }

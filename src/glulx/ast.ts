@@ -23,7 +23,9 @@ export interface Transcodable {
 }
 
 export interface Opcode extends Transcodable {
+    offset?: uint32    // if decoded from an image, the offset of this opcode
     transcode(context: TranscodingContext): AnyOp
+
 }
 
 export interface LoadOperandType extends Transcodable {
@@ -66,7 +68,7 @@ class Callf implements Opcode {
     }
 }
 
-class GlkCall implements Opcode {
+export class GlkCall implements Opcode {
     constructor(private readonly selector: LoadOperandType, private readonly argc: LoadOperandType, private readonly result: StoreOperandType) { }
     transcode(context: TranscodingContext) {
         const { selector, argc, result } = this
@@ -98,7 +100,7 @@ const return_one = c.return_(one)
 const jump_vectors = [c.varuint32(0), c.varuint32(1), c.varuint32(3)]
 const real_jump = c.varuint32(2)
 
-class Jump implements Opcode {
+export class Jump implements Opcode {
     constructor(private readonly v: LoadOperandType) { }
     transcode(context) {
         const v = this.v
@@ -125,6 +127,7 @@ class Jump implements Opcode {
 
 export class ConditionalJump implements Opcode {
     constructor(private readonly comp: ((args: Op<I32>[]) => Op<I32>), private readonly args: LoadOperandType[], readonly vector: LoadOperandType) { }
+    offset: uint32
     transcode(context) {
         const { vector } = this
         const cond = this.transcodeCondition(context)
