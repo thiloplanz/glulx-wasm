@@ -12,7 +12,7 @@ Not much yet...
 
 There is a unit test to look at, which takes an AST with a sequence of Glulx operations, transforms it into a WASM-AST, emits that into a WASM binary, instantiates it as a module in your browser, calls the exported functions and asserts their result.
 
-1. Get Chrome Canary and open `chrome://flags/#enable-webassembly`  (if you can get this to work in any other browser let me know)
+1. Get a browser that supports web assembly. It works on the latest Firefox out-of-the-box, or you can get Chrome Canary and open `chrome://flags/#enable-webassembly`.
 2. compile the tests with `cd test/glulx; npm start`
 3. go to `http://localhost:3000/web/index.html` to run the tests, see if everything is green
 4. You can take a look at the compiled module in the Chrome Developer Tools: Go to the "Sources" tab, there should be a section called "wasm"
@@ -23,11 +23,11 @@ There is a unit test to look at, which takes an AST with a sequence of Glulx ope
 The Glulx virtual machine memory is mapped directly to the WASM module's default linear memory.
 
 That means that ROM starts at address 0 and RAM starts at the specified RAMSTART.
-After that come the regions for the managed heap (TODO) and the stack.
+After that come the regions for the managed heap (TODO), for decoded strings (TODO) and the stack.
 
 A little complication occurs when reading values from mapped memory because Glulx uses a big-endian format 
 whereas the WASM opcodes expect little-endian. The runtime library provides for conversion functions
-that the compiled code calls into (TODO).
+that the compiled code calls into.
 
 ### Global variables
 
