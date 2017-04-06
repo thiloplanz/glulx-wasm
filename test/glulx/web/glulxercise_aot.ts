@@ -6,72 +6,17 @@
 
 import { Test } from '../../nodeunit'
 
-import { g, GlulxFunction } from '../../../src/glulx/ast'
-import { module } from '../../../src/glulx/module'
-import { BufferedEmitter } from '../../../src/emit'
-import { decodeOpcode, decodeFunction } from '../../../src/glulx/decoder'
 import { DummyGLK, OutputBuffer, ClearOutputBuffer } from '../../../src/glulx/glk'
 import { GlulxAccess, VmLibSupport } from '../../../src/glulx/host'
 
 import { test_cases } from './glulxercise_cases'
 
-let image: Uint8Array
 
-const gluxercise: Promise<any[][]> = new Promise(function (resolve, reject) {
-    let request = new XMLHttpRequest();
-    request.open("GET", "../glulxercise.ulx");
-    request.responseType = 'arraybuffer';
-    request.onload = function () {
-        if (request.status == 200) {
-            image = new Uint8Array(request.response)
-            resolve(cases.map(c => {
-                const name = c.shift()
-                try {
-                    if (c[0].apply) {
-                        c[0] = c[0](image)
-                    }
-                    else {
-                        c[0] = decodeFunction(image, c[0]).v
-                    }
-                    c[0].name = name
-                } catch (e) {
-                    console.warn("failed to compile " + name, e)
-                    c[0] = { failed: true, name: name }
-                }
-                return c
-            }))
-        } else {
-            console.warn("Failed to load the glulxercise image", request.statusText)
-            resolve([])
-        }
-    }
-    request.onerror = function () {
-        console.error('There was a network error. Could not load the glulxercise image');
-        resolve([])
-    }
+declare var WebAssembly: any
 
-    request.send()
-})
-
-const wasm: Promise<any> = gluxercise.then(cases => {
-    const mod = module(cases.map(c => c[0]).filter(x => !x.failed), image, 0x00027600, 0x0002b200)
-    const buffer = new ArrayBuffer(1024 * 1024)
-    const emitter = new BufferedEmitter(buffer)
-    mod.emit(emitter)
-    return WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length), { vmlib_support })
-})
-
-
-const cases: any[][] = [
-    [
-        "_0x000012f7__add_03_fc_Fr00",
-        glulxercise => g.function_i32_i32(0, null, [
-            decodeOpcode(glulxercise, 0x00012f7).v,  // add  03 fc Fr:00
-            g.return_(g.localVariable(0))
-        ]),
-        88, 0xff, null
-    ]
-].concat(test_cases)
+const wasm = fetch('build/glulxercise.wasm')
+    .then(response => response.arrayBuffer())
+    .then(bytes => WebAssembly.instantiate(bytes, { vmlib_support }))
 
 
 function checkOutput(test: Test, expected: string, returnValue: number, expectedReturnValue: number) {
@@ -91,8 +36,6 @@ const vmlib_support: VmLibSupport = {
         return glulx.glk(selector, argc)
     }
 }
-
-declare var WebAssembly: any
 
 function runCase(test: Test, name: string, data: any[]) {
     wasm.then(module => {
@@ -128,16 +71,15 @@ function runCase(test: Test, name: string, data: any[]) {
 }
 
 
-tests["compile test module from glulxercise image"] = (test: Test) => {
+tests["load ahead-of-time compiled WASM"] = (test: Test) => {
     wasm.then(module => {
         const exp = module.instance.exports
-        cases.forEach(c => test.ok(exp[c[0].name], "exported function " + c[0].name))
-
+        test_cases.forEach(c => test.ok(exp[c[0].name], "exported function " + c[0].name))
         test.done()
     })
 }
 
-cases.forEach(c => {
+test_cases.forEach(c => {
     const name = c[0]
     tests[name] = (test: Test) => runCase(test, name, c)
 })

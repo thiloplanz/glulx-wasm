@@ -16,10 +16,11 @@
     baseUrl: 'build/test/glulx/web',
   });
 
-  require(["tests", "glulxercise"], (ast, gl) => {
+  require(["tests", "glulxercise", "glulxercise_aot"], (ast, gl, aot) => {
     nodeunit.run({
       'Hand-rolled AST': ast,
-      'Glulxercise functions': gl
+      'Glulxercise functions': gl,
+      'AOT Glulxercise': aot
     })
   })
 

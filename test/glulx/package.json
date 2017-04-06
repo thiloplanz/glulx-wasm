@@ -4,12 +4,16 @@
   "scripts": {
     "start": "concurrently \"npm run tsc:w\" \"npm run lite\" ",
     "tsc:w": "tsc -p web -w",
-    "lite": "lite-server"
-   },
+    "lite": "lite-server",
+    "aot": "cd aot && tsc && node build/test/glulx/aot/glulxercise.js"
+  },
   "license": " CC0-1.0",
   "devDependencies": {
     "concurrently": "^2.0.0",
     "lite-server": "^2.2.0",
     "typescript": "^2.2.1"
+  },
+  "dependencies": {
+    "@types/node": "^7.0.12"
   }
 }
