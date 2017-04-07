@@ -18,7 +18,7 @@ import { test_cases } from "../web/glulxercise_cases"
 
 let buffer = fs.readFileSync("../glulxercise.ulx").buffer;
 let image = new Uint8Array(buffer)
-let mod = module(test_cases.map(x => decodeFunction(image, x[1], x[0]).v), image, 0x00027600, 0x0002b200)
+let mod = module(test_cases.map(x => decodeFunction(image, x[1], x[0]).v), image, 0x00027600, 0x0002b200, 0x0001c9a6)
 
 const wasm = new ArrayBuffer(2 * 1024 * 1024)
 const emitter = new BufferedEmitter(wasm)

@@ -54,7 +54,7 @@ const gluxercise: Promise<any[][]> = new Promise(function (resolve, reject) {
 })
 
 const wasm: Promise<any> = gluxercise.then(cases => {
-    const mod = module(cases.map(c => c[0]).filter(x => !x.failed), image, 0x00027600, 0x0002b200)
+    const mod = module(cases.map(c => c[0]).filter(x => !x.failed), image, 0x00027600, 0x0002b200, 0x0001c9a6)
     const buffer = new ArrayBuffer(1024 * 1024)
     const emitter = new BufferedEmitter(buffer)
     mod.emit(emitter)
@@ -70,6 +70,14 @@ const cases: any[][] = [
             g.return_(g.localVariable(0))
         ]),
         88, 0xff, null
+    ],
+    [
+        "decode_compressed_string_1d279",
+        gluxercise => g.function_i32_i32(1, null, [
+            g.streamstr(g.const_(0x0001d279)),
+            g.return_(g.localVariable(0))
+        ]),
+        0, 0, "Nothing happens."
     ]
 ].concat(test_cases)
 
@@ -113,6 +121,7 @@ function runCase(test: Test, name: string, data: any[]) {
                     expected.call(null, test, result)
                 } else {
                     if (expectedOutput === null) {
+                        console.info(input, expected, result, func)
                         test.equals(result, expected, input + " -> " + expected + ", got " + result)
                     } else {
                         checkOutput(test, expectedOutput, result, expected)
@@ -130,12 +139,16 @@ function runCase(test: Test, name: string, data: any[]) {
 
 tests["compile test module from glulxercise image"] = (test: Test) => {
     wasm.then(module => {
+        window['mooo'] = module
+
         const exp = module.instance.exports
         cases.forEach(c => test.ok(exp[c[0].name], "exported function " + c[0].name))
 
         test.done()
     })
 }
+
+
 
 cases.forEach(c => {
     const name = c[0]

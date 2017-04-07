@@ -27,7 +27,7 @@ function function_body(opcodes: Opcode[], context: TranscodingContext): Function
     return c.function_body([ /* additional local variables here */], opcodes.map(o => o.transcode(context)))
 }
 
-export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: uint32, endMem: uint32): Module {
+export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: uint32, endMem: uint32, stringTbl: uint32): Module {
 
     const heapSize = 0  // TODO
     const stackStart = endMem + heapSize
@@ -67,7 +67,8 @@ export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: 
             callableFunctions: functionIndex,
             image,
             ramStart,
-            endMem
+            endMem,
+            stringTbl
         })))),
         data_sec
     ])

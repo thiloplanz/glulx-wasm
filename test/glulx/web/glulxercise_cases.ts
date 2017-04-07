@@ -67,13 +67,13 @@ export const test_cases: any[][] = [
     [
         "_0x00000e52__streamstr",
         0x0e52,
-        [], 1, "A proper E1 string",
+        [], 1, "Nothing happens.\n",
     ],
     [
         "_0x0000097f__if_then_else_return",
         0x097f,
         [0, 0], 1, "0",
         [1, 1], 1, "1",
-        [2, 3], 0, "A proper E1 string"
+        [2, 3], 0, "2 (should be 3 FAIL)"
     ]
 ]

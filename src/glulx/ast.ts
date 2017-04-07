@@ -10,12 +10,14 @@ import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module
 import { uint32 } from '../basic-types'
 import { vmlib_call, types } from './vmlib'
 import { GlkSelector } from './host'
+import { StreamStr } from './strings'
 
 export interface TranscodingContext {
     callableFunctions: VarUint32[],
     image: Uint8Array,
     ramStart: uint32,
-    endMem: uint32
+    endMem: uint32,
+    stringTbl: uint32
 }
 
 export interface Transcodable {
@@ -152,32 +154,6 @@ class Copy implements Opcode {
     transcode(context) { return this.x.transcode(context, this.a.transcode(context)) }
 }
 
-class StreamStr implements Opcode {
-    constructor(private readonly addr: LoadOperandType) { }
-    transcode(context: TranscodingContext) {
-        const { addr } = this
-        if (addr instanceof Constant) {
-            // inline access to Strings that are completely in ROM
-            if (addr.v < context.ramStart) {
-                const type = context.image[addr.v]
-                switch (type) {
-                    case 0xE0:
-                        let end = addr.v + 1
-                        while (context.image[end] > 0) end++
-                        let length = end - addr.v - 1
-                        if (length == 0) return c.nop
-                        if (end <= context.ramStart) return vmlib_call.stream_buffer(c.i32.const(addr.v + 1), c.i32.const(length))
-                        break;
-                    case 0xE1:
-                        console.error("faking E1 string at " + addr.v)
-                        return vmlib_call.streamchar(c.i32.const('?'.charCodeAt(0)))
-                    default: throw new Error("unsupported String type " + type)
-                }
-            }
-        }
-        throw new Error("dynamic or RAM streamstr not yet implemented")
-    }
-}
 
 export class Constant implements LoadOperandType {
     constructor(readonly v: uint32) { }

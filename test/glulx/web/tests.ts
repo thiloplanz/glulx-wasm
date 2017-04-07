@@ -148,7 +148,7 @@ const vmlib_support: VmLibSupport = {
     }
 }
 
-const mod = module(cases.map(c => c[0]), image, ramStart, image.byteLength)
+const mod = module(cases.map(c => c[0]), image, ramStart, image.byteLength, 0x00)
 const buffer = new ArrayBuffer(32000)
 const emitter = new BufferedEmitter(buffer)
 mod.emit(emitter)
