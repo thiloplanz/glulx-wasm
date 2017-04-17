@@ -134,9 +134,10 @@ function decodeFunctionSignature_in_in_in(image: Uint8Array, offset: number) {
 }
 
 export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opcode> {
-    const opcode = image[offset]
+    let opcode = image[offset]
     let sig
-    switch (opcode) {
+    // one-byte opcode
+    if (opcode < 0x80) switch (opcode) {
         case 0x10:  // add
             let { a, b, x, nextOffset } = decodeFunctionSignature_in_in_out(image, offset + 1)
             return new ParseResult(g.add(a, b, x), nextOffset)
@@ -166,6 +167,20 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
             return new ParseResult(g.streamstr(sig.a), sig.nextOffset)
         default:
             throw new Error(`unknown opcode ${opcode} at ${offset}`)
+    }
+    else if (opcode < 0xC0) {
+        opcode = read_uint16(image, offset) - 0x8000
+        switch (opcode) {
+            case 0x149: // setiosys
+                sig = decodeFunctionSignature_in_in(image, offset + 2)
+                return new ParseResult(g.setiosys(sig.a, sig.b), sig.nextOffset)
+            default:
+                throw new Error(`unknown 16-bit opcode ${opcode} at ${offset}`)
+        }
+
+    } else {
+        opcode = read_uint32(image, offset) - 0xC0000000
+        throw new Error(`unknown 32-bit opcode ${opcode} at ${offset}`)
     }
 }
 

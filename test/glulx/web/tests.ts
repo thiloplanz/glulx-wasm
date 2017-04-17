@@ -121,6 +121,7 @@ const cases: any[] = [
     ],
     [
         g.function_i32_i32(addr++, "streamnum", [
+            g.setiosys(g.const_(2), g.const_(0)),
             g.streamnum(var0),
             g.return_(var0)
         ]),

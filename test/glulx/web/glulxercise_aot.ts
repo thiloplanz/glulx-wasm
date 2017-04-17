@@ -47,10 +47,14 @@ function runCase(test: Test, name: string, data: any[]) {
         if (func) for (let i = 1; i < data.length; i += 3) {
             let input = data[i]
             if (!input.slice) input = [input]
-            ClearOutputBuffer()
             let expected = data[i + 1]
             let expectedOutput = data[i + 2]
             try {
+                if (expectedOutput !== null) {
+                    // turn on GLK
+                    module.instance.exports["_0x0000a022__setiosys"](88)
+                }
+                ClearOutputBuffer()
                 let result = func.apply(null, input)
                 if (expected.call) {
                     expected.call(null, test, result)

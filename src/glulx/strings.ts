@@ -60,7 +60,6 @@ function decodeString(context: TranscodingContext, nodeAddr: uint32, nextByte: u
             return []
         case 0x02: // single character
             char = image[nodeAddr + 1]
-            console.info(String.fromCharCode(char), char)
             rest = decodeString(context, read_uint32(context.image, context.stringTbl + 8), nextByte, nextBit)
             rest.unshift(vmlib_call.streamchar(c.i32.const(char)))
             return rest

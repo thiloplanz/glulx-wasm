@@ -42,7 +42,11 @@ export function global_section(stackStart: uint32, ramStart: uint32, endMem: uin
         // 2: RAMSTART
         c.global_variable(immutable, c.init_expr([c.i32.const(ramStart)])),
         // 3: ENDMEM (64 bits for overflow-safe range checking)
-        c.global_variable(mutable64, c.init_expr([c.i64.const(endMem)]))
+        c.global_variable(mutable64, c.init_expr([c.i64.const(endMem)])),
+        // 4: current IO-system, always starts at 0
+        c.global_variable(mutable, c.init_expr([zero])),
+        // 5: current IO-system "rock"
+        c.global_variable(mutable, c.init_expr([zero]))
         // TODO: stack size
     ])
 }
@@ -61,11 +65,32 @@ const STACK_START = 0
 const STACK_POINTER = 1
 const RAMSTART = 2
 const ENDMEM = 3
+const IOSYS = 4
+const IOROCK = 5
 
 const arg0 = c.get_local(c.i32, 0)
 const arg1 = c.get_local(c.i32, 1)
 
 const SP = c.get_global(c.i32, STACK_POINTER)
+
+function io_system_switch(glk: Op<Void>[], filter: Op<Void>[], fyrevm: Op<Void>[]) {
+    const IO_SYS_GLK = c.i32.const(2)
+
+    return c.if(c.void, c.i32.eq(c.get_global(c.i32, IOSYS), IO_SYS_GLK),
+        glk,
+        [
+            c.if(c.void, c.i32.eqz(c.get_global(c.i32, IOSYS)), [
+                // "null" system
+                c.nop
+            ],
+                [
+                    c.unreachable  // FyreVM and filter unimplemented
+                ]
+            )
+        ]
+    )
+}
+
 
 const fourBytes = c.i32.const(4)
 const eightBits = c.i32.const(8)
@@ -132,11 +157,9 @@ const lib = [
         [
             // argument is treated as a signed integer
 
-            // TODO: need to check IO system mode, don't assume GLK
-
             // negative ?
             c.if(c.void, c.i32.lt_s(arg0, zero), [
-                glk_void_call_with_args(put_char, [minus]),
+                streamchar(minus),
                 c.set_local(0, c.i32.sub(zero, arg0))
             ]) as Op<AnyResult>,
 
@@ -149,9 +172,7 @@ const lib = [
 
 
             // write a single digit
-            glk_void_call_with_args(put_char, [
-                c.i32.add(c.i32.rem_u(arg0, ten), c.i32.const("0".charCodeAt(0)))
-            ]),
+            streamchar(c.i32.add(c.i32.rem_u(arg0, ten), c.i32.const("0".charCodeAt(0)))),
 
             arg0 // dummy return, because "void" does not work yet
 
@@ -161,9 +182,11 @@ const lib = [
     // 5: stream_buffer (offset, length)
     [types.in_in_out, c.function_body([],
         [
-            // TODO: need to check IO system mode, don't assume GLK
-            glk_void_call_with_args(c.i32.const(GlkSelector.put_buffer), [arg0, arg1]),
-
+            io_system_switch(
+                [glk_void_call_with_args(c.i32.const(GlkSelector.put_buffer), [arg0, arg1])],
+                [c.unreachable], // filter not implemented
+                [c.unreachable] // FyreVM not implemented
+            ),
             arg0 // dummy return, because "void" does not work yet
 
         ]
@@ -172,9 +195,11 @@ const lib = [
     // 6: streamchar
     [types.in_out, c.function_body([],
         [
-            // TODO: need to check IO system mode, don't assume GLK
-            glk_void_call_with_args(c.i32.const(GlkSelector.put_char), [arg0]),
-
+            io_system_switch(
+                [glk_void_call_with_args(c.i32.const(GlkSelector.put_char), [arg0])],
+                [c.unreachable], // filter not implemented
+                [c.unreachable] // FyreVM not implemented
+            ),
             arg0 // dummy return, because "void" does not work yet
         ]
     )
@@ -216,6 +241,10 @@ function push_(value: Op<I32>): Op<Void> {
     return c.drop(c.void, vmlib_function_call(0, [value]))
 }
 
+function streamchar(latin1: Op<I32>) {
+    return c.drop(c.void, vmlib_function_call(6, [latin1]))
+}
+
 function streamnum(num: Op<I32>): Op<Void> {
     return c.drop(c.void, vmlib_function_call(4, [num]))
 }
@@ -230,10 +259,13 @@ export const vmlib_call = {
     read_uint32: function (addr: Op<I32>): Op<I32> { return vmlib_function_call(2, [addr]) },
     store_uint32: function (addr: Op<I32>, v: Op<I32>): Op<Void> { return c.drop(c.void, vmlib_function_call(3, [addr, v])) },
 
-    streamchar: function (latin1: Op<I32>) { return c.drop(c.void, vmlib_function_call(6, [latin1])) },
-
+    streamchar,
     streamnum,
 
-    stream_buffer: function (offset: Op<I32>, length: Op<I32>) { return c.drop(c.void, vmlib_function_call(5, [offset, length])) }
+    stream_buffer: function (offset: Op<I32>, length: Op<I32>) { return c.drop(c.void, vmlib_function_call(5, [offset, length])) },
+
+    setiosys: function (sys: Op<I32>, rock: Op<I32>) {
+        return c.void_block([c.set_global(IOSYS, sys), c.set_global(IOROCK, rock)])
+    }
 
 }

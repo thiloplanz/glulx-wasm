@@ -70,6 +70,11 @@ export const test_cases: any[][] = [
         [], 1, "Nothing happens.\n",
     ],
     [
+        "_0x0000a022__setiosys",
+        0xa022,
+        88, 1, "<X>"  // 88 => X
+    ],
+    [
         "_0x0000097f__if_then_else_return",
         0x097f,
         [0, 0], 1, "0",

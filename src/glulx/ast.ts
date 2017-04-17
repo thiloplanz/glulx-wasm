@@ -300,6 +300,8 @@ export const g = {
 
     streamstr(addr: LoadOperandType): Opcode { return new StreamStr(addr) },
 
+    setiosys(sys: LoadOperandType, rock: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.setiosys, [sys, rock], null) },
+
     jump(v: LoadOperandType): Opcode { return new Jump(v) },
 
     jz(condition: LoadOperandType, vector: LoadOperandType): Opcode {
