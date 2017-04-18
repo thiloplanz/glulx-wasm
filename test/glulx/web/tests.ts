@@ -6,7 +6,7 @@
 
 import { Test } from '../../nodeunit'
 
-import { g, GlulxFunction } from '../../../src/glulx/ast'
+import { g, GlulxFunction, GlkCall } from '../../../src/glulx/ast'
 import { module } from '../../../src/glulx/module'
 import { BufferedEmitter } from '../../../src/emit'
 import { decodeOpcode, decodeFunction } from '../../../src/glulx/decoder'
@@ -17,6 +17,7 @@ import { VmLibSupport, GlulxAccess } from '../../../src/glulx/host'
 declare var WebAssembly: any
 
 const var0 = g.localVariable(0)
+const var1 = g.localVariable(4)
 
 const ramStart = 10
 const image = new Uint8Array([
@@ -111,6 +112,13 @@ const cases: any[] = [
         65, (test: Test, x) => checkOutput(test, "A"),
         66, (test: Test, x) => checkOutput(test, "B"),
         67, (test: Test, x) => checkOutput(test, "C")
+    ],
+    [
+        g.function_i32_i32_i32(addr++, "glk_call_1_arg", [
+            g.copy(var1, g.push),
+            new GlkCall(var0, g.const_(1), g.push),
+            g.return_(g.pop)]),
+        [0x80, 88], (test: Test, x) => checkOutput(test, "X")  // 0x80 = put_char, 88 = X
     ],
     [
         g.function_i32_i32(addr++, "glk_put_buffer",

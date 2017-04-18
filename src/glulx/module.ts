@@ -9,7 +9,7 @@
 import { g, Opcode, GlulxFunction, TranscodingContext } from './ast'
 import { global_section, types, vmlib, vmlib_function_types, vmlib_imports, type_section, vmlib_function_index } from './vmlib'
 
-import { Module, c, FunctionBody, VarUint32, I32 } from '../ast'
+import { Module, c, FunctionBody, VarUint32, I32, LocalEntry } from '../ast'
 import { uint32 } from '../basic-types'
 
 const {
@@ -23,8 +23,8 @@ const var0 = g.localVariable(0)
 const zero = varuint32(0)
 const i32_zero = c.i32.const(0)
 
-function function_body(opcodes: Opcode[], context: TranscodingContext): FunctionBody {
-    return c.function_body([ /* additional local variables here */], opcodes.map(o => o.transcode(context)))
+function function_body(opcodes: Opcode[], context: TranscodingContext, extraLocals: LocalEntry[] = []): FunctionBody {
+    return c.function_body(extraLocals, opcodes.map(o => o.transcode(context)))
 }
 
 export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: uint32, endMem: uint32, stringTbl: uint32): Module {
@@ -69,7 +69,7 @@ export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: 
             ramStart,
             endMem,
             stringTbl
-        })))),
+        }, (f.stackCalled ? [c.local_entry(c.varint32(f.localsCount), c.i32)] : []))))),
         data_sec
     ])
 } 

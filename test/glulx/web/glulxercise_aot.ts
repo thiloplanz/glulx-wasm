@@ -42,6 +42,7 @@ function runCase(test: Test, name: string, data: any[]) {
         glulx = new GlulxAccess(module.instance, DummyGLK)
 
         const func = module && module.instance && module.instance.exports && module.instance.exports[name]
+        const stackCalled = name.startsWith("stackCalled_")
 
         test.ok(func, "compiled function was found in exports")
         if (func) for (let i = 1; i < data.length; i += 3) {
@@ -55,7 +56,8 @@ function runCase(test: Test, name: string, data: any[]) {
                     module.instance.exports["_0x0000a022__setiosys"](88)
                 }
                 ClearOutputBuffer()
-                let result = func.apply(null, input)
+                let result = stackCalled ? glulx.callStackCalledFunction(func, input) : func.apply(null, input)
+
                 if (expected.call) {
                     expected.call(null, test, result)
                 } else {

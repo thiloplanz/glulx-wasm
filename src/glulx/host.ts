@@ -36,11 +36,23 @@ export class GlulxAccess {
 
     popFunctionArgumentsFromStack(count): uint32[] {
         const args = []
-        const _pop = this.instance.exports._pop
+        const { _pop } = this.instance.exports
         for (let i = 0; i < count; i++) {
             args.push(_pop())
         }
         return args
+    }
+
+    callStackCalledFunction(func: Function, args: uint32[]): uint32 {
+        const { _push } = this.instance.exports
+        if (args.length == 0) {
+            _push(0)
+        } else {
+            args = args.slice().reverse()
+            args.forEach(x => _push(x))
+            _push(args.length)
+        }
+        return func()
     }
 
     glk(selector, argc): uint32 {

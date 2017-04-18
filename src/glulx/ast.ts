@@ -44,6 +44,7 @@ export class GlulxFunction {
         readonly name: string,
         readonly type: FuncType,
         readonly stackCalled: Boolean,
+        readonly localsCount: uint32,
         readonly opcodes: Opcode[]) { }
 }
 
@@ -147,6 +148,11 @@ export class ConditionalJump implements Opcode {
 class Add implements Opcode {
     constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
     transcode(context) { return this.x.transcode(context, c.i32.add(this.a.transcode(context), this.b.transcode(context))) }
+}
+
+class Sub implements Opcode {
+    constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
+    transcode(context) { return this.x.transcode(context, c.i32.sub(this.a.transcode(context), this.b.transcode(context))) }
 }
 
 class Copy implements Opcode {
@@ -268,6 +274,8 @@ export const g = {
 
     add(a: LoadOperandType, b: LoadOperandType, x: StoreOperandType): Opcode { return new Add(a, b, x) },
 
+    sub(a: LoadOperandType, b: LoadOperandType, x: StoreOperandType): Opcode { return new Sub(a, b, x) },
+
     copy(a: LoadOperandType, x: StoreOperandType): Opcode { return new Copy(a, x) },
 
     return_(v: LoadOperandType): Opcode { return new Return(v) },
@@ -313,6 +321,10 @@ export const g = {
     },
 
     function_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
-        return new GlulxFunction(address, name, types.in_out, false, opcodes)
+        return new GlulxFunction(address, name, types.in_out, false, 0, opcodes)
+    },
+
+    function_i32_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
+        return new GlulxFunction(address, name, types.in_in_out, false, 0, opcodes)
     }
 }

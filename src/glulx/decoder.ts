@@ -9,7 +9,7 @@
 import {
     g, LoadOperandType, StoreOperandType, Opcode,
     Constant, GlulxFunction, Return, read_uint16, read_uint32,
-    Jump, ConditionalJump, TranscodingContext
+    Jump, ConditionalJump, TranscodingContext, GlkCall
 } from './ast'
 
 import {
@@ -139,8 +139,11 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
     // one-byte opcode
     if (opcode < 0x80) switch (opcode) {
         case 0x10:  // add
-            let { a, b, x, nextOffset } = decodeFunctionSignature_in_in_out(image, offset + 1)
-            return new ParseResult(g.add(a, b, x), nextOffset)
+            sig = decodeFunctionSignature_in_in_out(image, offset + 1)
+            return new ParseResult(g.add(sig.a, sig.b, sig.x), sig.nextOffset)
+        case 0x11:  // sub
+            sig = decodeFunctionSignature_in_in_out(image, offset + 1)
+            return new ParseResult(g.sub(sig.a, sig.b, sig.x), sig.nextOffset)
         case 0x20:  // jump
             sig = decodeFunctionSignature_in(image, offset + 1)
             return new ParseResult(g.jump(sig.a), sig.nextOffset)
@@ -171,6 +174,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
     else if (opcode < 0xC0) {
         opcode = read_uint16(image, offset) - 0x8000
         switch (opcode) {
+            case 0x130: // glk
+                sig = decodeFunctionSignature_in_in_out(image, offset + 2)
+                return new ParseResult(new GlkCall(sig.a, sig.b, sig.x), sig.nextOffset)
             case 0x149: // setiosys
                 sig = decodeFunctionSignature_in_in(image, offset + 2)
                 return new ParseResult(g.setiosys(sig.a, sig.b), sig.nextOffset)
@@ -205,8 +211,10 @@ const THE_END = 0xFFFFFFFF
 export function decodeFunction(image: Uint8Array, offset: number, name?: string): ParseResult<GlulxFunction> {
     const callType = image[offset]
     const funcOffset = offset
+    let stackCalled = false
+    let localsCount = 0
     switch (callType) {
-        case 0xC0: throw new Error("stack-called functions are not implemented")
+        case 0xC0: stackCalled = true
         case 0xC1:
             const argType = image[offset + 1]
             const argCount = image[offset + 2]
@@ -220,7 +228,14 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
                 if (argCount != 1)
                     if (image[offset] != 0) throw new Error("only a single argument group is implemented")
                 offset += 2
-                switch (argCount) {
+
+                if (stackCalled) {
+                    localsCount = argCount
+                    ftype = types.out
+                }
+                else switch (argCount) {
+                    // TODO: how to differentiate between arguments and local parameters ?
+                    // probably need to 0-pad at the call-site
                     case 0: ftype = types.out; break;
                     case 1: ftype = types.in_out; break;
                     case 2: ftype = types.in_in_out; break;
@@ -235,7 +250,7 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
             if (!condJump) {
                 if (lastOp instanceof Return) {
                     return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
-                        ftype, false, bodyStart.v), bodyStart.nextOffset)
+                        ftype, stackCalled, localsCount, bodyStart.v), bodyStart.nextOffset)
                 }
                 throw new Error("function body does not end in Return")
             }
@@ -249,7 +264,7 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
                     if (jump < 3) {
                         // return or nop
                         return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
-                            ftype, false, bodyStart.v), bodyStart.nextOffset)
+                            ftype, stackCalled, localsCount, bodyStart.v), bodyStart.nextOffset)
                     }
                     // if/then/else ?
                     // does the jump go after the already parse opcodes? That would be "then"
@@ -263,7 +278,7 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
                         // TODO: recursively also check for more nested conditionals
                         const dummyReturnNeeded = g.return_(g.const_(98))  // FF can do without? Chrome needs it?
                         return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
-                            ftype, false, bodyStart.v.slice(0, indexOfJump + 1).concat(dummyReturnNeeded)), bodyStart.nextOffset)
+                            ftype, stackCalled, localsCount, bodyStart.v.slice(0, indexOfJump + 1).concat(dummyReturnNeeded)), bodyStart.nextOffset)
                     }
                 }
             }
