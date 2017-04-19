@@ -12,8 +12,10 @@ import { vmlib_call, types } from './vmlib'
 import { GlkSelector } from './host'
 import { StreamStr } from './strings'
 
+
 export interface TranscodingContext {
     callableFunctions: VarUint32[],
+    stackCalledFunctions: boolean[],
     image: Uint8Array,
     ramStart: uint32,
     endMem: uint32,
@@ -64,6 +66,19 @@ class Callf implements Opcode {
             if (!index) {
                 console.error(`unknown function being called: ${address}`)
                 return c.unreachable
+            }
+            if (context.stackCalledFunctions[address.v]) {
+                return c.void_block(
+                    // push args in reverse order
+                    args.slice().reverse().map(x => vmlib_call.push(x.transcode(context)))
+                        .concat(
+                        // push arg count
+                        vmlib_call.push(c.i32.const(args.length)),
+                        // make the call
+                        result.transcode(context, c.call(c.i32, index, []))
+                        // TODO: clean up the stack (call args should have been removed)
+                        )
+                )
             }
             return result.transcode(context, c.call(c.i32, index, args.map(x => x.transcode(context))))
         }

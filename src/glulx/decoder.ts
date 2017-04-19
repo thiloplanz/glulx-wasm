@@ -96,6 +96,41 @@ function decodeFunctionSignature_in_in_out(image: Uint8Array, offset: number) {
     }
 }
 
+function decodeFunctionSignature_in_in_in_out(image: Uint8Array, offset: number) {
+    const sig1 = image[offset]
+    const sig2 = image[offset + 1]
+    let a = decodeLoadOperand(0x0F & sig1, image, offset + 2)
+    let b = decodeLoadOperand(sig1 >>> 4, image, a.nextOffset)
+    let c = decodeLoadOperand(0x0F & sig2, image, b.nextOffset)
+    let x = decodeStoreOperand(sig2 >>> 4, image, c.nextOffset)
+    return {
+        a: a.v,
+        b: b.v,
+        c: c.v,
+        x: x.v,
+        nextOffset: x.nextOffset
+    }
+}
+
+function decodeFunctionSignature_in_in_in_in_out(image: Uint8Array, offset: number) {
+    const sig1 = image[offset]
+    const sig2 = image[offset + 1]
+    const sig3 = image[offset + 2]
+    let a = decodeLoadOperand(0x0F & sig1, image, offset + 3)
+    let b = decodeLoadOperand(sig1 >>> 4, image, a.nextOffset)
+    let c = decodeLoadOperand(0x0F & sig2, image, b.nextOffset)
+    let d = decodeLoadOperand(sig2 >>> 4, image, c.nextOffset)
+    let x = decodeStoreOperand(0x0F & sig3, image, d.nextOffset)
+    return {
+        a: a.v,
+        b: b.v,
+        c: c.v,
+        d: d.v,
+        x: x.v,
+        nextOffset: x.nextOffset
+    }
+}
+
 function decodeFunctionSignature_in(image: Uint8Array, offset: number) {
     const sig = image[offset]
     let a = decodeLoadOperand(0x0F & sig, image, offset + 1)
@@ -135,58 +170,72 @@ function decodeFunctionSignature_in_in_in(image: Uint8Array, offset: number) {
 
 export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opcode> {
     let opcode = image[offset]
+    if (opcode < 0x80) {
+        // one-byte opcode
+        offset++;
+    } else if (opcode < 0xC0) {
+        // two-byte opcode
+        opcode = read_uint16(image, offset) - 0x8000
+        offset += 2
+    } else {
+        // four-byte opcode
+        opcode = read_uint32(image, offset) - 0xC0000000
+        offset += 4
+    }
     let sig
-    // one-byte opcode
-    if (opcode < 0x80) switch (opcode) {
+
+    switch (opcode) {
         case 0x10:  // add
-            sig = decodeFunctionSignature_in_in_out(image, offset + 1)
+            sig = decodeFunctionSignature_in_in_out(image, offset)
             return new ParseResult(g.add(sig.a, sig.b, sig.x), sig.nextOffset)
         case 0x11:  // sub
-            sig = decodeFunctionSignature_in_in_out(image, offset + 1)
+            sig = decodeFunctionSignature_in_in_out(image, offset)
             return new ParseResult(g.sub(sig.a, sig.b, sig.x), sig.nextOffset)
         case 0x20:  // jump
-            sig = decodeFunctionSignature_in(image, offset + 1)
+            sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.jump(sig.a), sig.nextOffset)
         case 0x22:  // jz
-            sig = decodeFunctionSignature_in_in(image, offset + 1)
+            sig = decodeFunctionSignature_in_in(image, offset)
             return new ParseResult(g.jz(sig.a, sig.b), sig.nextOffset)
         case 0x25:  // jne
-            sig = decodeFunctionSignature_in_in_in(image, offset + 1)
+            sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jne(sig.a, sig.b, sig.c), sig.nextOffset)
         case 0x31:  // return
-            sig = decodeFunctionSignature_in(image, offset + 1)
+            sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.return_(sig.a), sig.nextOffset)
         case 0x40:  // copy
-            sig = decodeFunctionSignature_in_out(image, offset + 1)
+            sig = decodeFunctionSignature_in_out(image, offset)
             return new ParseResult(g.copy(sig.a, sig.out), sig.nextOffset)
         case 0x70: // streamchar
-            sig = decodeFunctionSignature_in(image, offset + 1)
+            sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.streamchar(sig.a), sig.nextOffset)
         case 0x71: // streamnum
-            sig = decodeFunctionSignature_in(image, offset + 1)
+            sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.streamnum(sig.a), sig.nextOffset)
         case 0x72: // streamstr
-            sig = decodeFunctionSignature_in(image, offset + 1)
+            sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.streamstr(sig.a), sig.nextOffset)
+        case 0x130: // glk
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(new GlkCall(sig.a, sig.b, sig.x), sig.nextOffset)
+        case 0x149: // setiosys
+            sig = decodeFunctionSignature_in_in(image, offset)
+            return new ParseResult(g.setiosys(sig.a, sig.b), sig.nextOffset)
+        case 0x160: // callf
+            sig = decodeFunctionSignature_in_out(image, offset)
+            return new ParseResult(g.callf(sig.a, [], sig.out), sig.nextOffset)
+        case 0x161: // callfi
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(g.callf(sig.a, [sig.b], sig.x), sig.nextOffset)
+        case 0x162: // callfii
+            sig = decodeFunctionSignature_in_in_in_out(image, offset)
+            return new ParseResult(g.callf(sig.a, [sig.b, sig.c], sig.x), sig.nextOffset)
+        case 0x163: // callfiii
+            sig = decodeFunctionSignature_in_in_in_in_out(image, offset)
+            return new ParseResult(g.callf(sig.a, [sig.b, sig.c, sig.d], sig.x), sig.nextOffset)
+
         default:
             throw new Error(`unknown opcode ${opcode} at ${offset}`)
-    }
-    else if (opcode < 0xC0) {
-        opcode = read_uint16(image, offset) - 0x8000
-        switch (opcode) {
-            case 0x130: // glk
-                sig = decodeFunctionSignature_in_in_out(image, offset + 2)
-                return new ParseResult(new GlkCall(sig.a, sig.b, sig.x), sig.nextOffset)
-            case 0x149: // setiosys
-                sig = decodeFunctionSignature_in_in(image, offset + 2)
-                return new ParseResult(g.setiosys(sig.a, sig.b), sig.nextOffset)
-            default:
-                throw new Error(`unknown 16-bit opcode ${opcode} at ${offset}`)
-        }
-
-    } else {
-        opcode = read_uint32(image, offset) - 0xC0000000
-        throw new Error(`unknown 32-bit opcode ${opcode} at ${offset}`)
     }
 }
 

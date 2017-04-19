@@ -255,6 +255,7 @@ export const vmlib_call = {
 
     // then our vmlib functions
     push: push_,
+    // TODO: have a "push many" (useful for making stack-based calls)
     pop: vmlib_function_call(1, []),
     read_uint32: function (addr: Op<I32>): Op<I32> { return vmlib_function_call(2, [addr]) },
     store_uint32: function (addr: Op<I32>, v: Op<I32>): Op<Void> { return c.drop(c.void, vmlib_function_call(3, [addr, v])) },

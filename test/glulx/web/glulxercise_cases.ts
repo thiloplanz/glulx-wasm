@@ -80,6 +80,11 @@ export const test_cases: any[][] = [
         [0x80, 88], 0, "X"  // 0x80 = glk_putchar, 88 => X
     ],
     [
+        "_0x00009ff9__callfii_stackfunction",
+        0x9ff9,
+        89, 1, "<Y>"
+    ],
+    [
         "_0x0000097f__if_then_else_return",
         0x097f,
         [0, 0], 1, "0",

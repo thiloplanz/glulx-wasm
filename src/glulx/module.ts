@@ -34,7 +34,11 @@ export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: 
 
     const memoryPages = varuint32(image.byteLength / (64 * 1024) + 1)
     const functionIndex: VarUint32[] = []
-    functions.forEach((f, i) => functionIndex[f.address] = varuint32(i + vmlib_imports.length + vmlib_function_types.length))
+    const stackCalledFunctions: boolean[] = []
+    functions.forEach((f, i) => {
+        functionIndex[f.address] = varuint32(i + vmlib_imports.length + vmlib_function_types.length)
+        if (f.stackCalled) stackCalledFunctions[f.address] = true
+    })
 
     const function_sec = function_section(vmlib_function_types.map(x => types.lookup(x))
         .concat(functions.map(f => {
@@ -65,6 +69,7 @@ export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: 
         export_sec,
         code_section(vmlib.concat(functions.map(f => function_body(f.opcodes, {
             callableFunctions: functionIndex,
+            stackCalledFunctions,
             image,
             ramStart,
             endMem,

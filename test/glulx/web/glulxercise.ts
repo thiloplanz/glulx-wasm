@@ -61,11 +61,11 @@ const wasm: Promise<any> = gluxercise.then(cases => {
     return WebAssembly.instantiate(new Uint8Array(buffer, 0, emitter.length), { vmlib_support })
 })
 
-
+let addr = 0;
 const cases: any[][] = [
     [
         "_0x000012f7__add_03_fc_Fr00",
-        glulxercise => g.function_i32_i32(0, null, [
+        glulxercise => g.function_i32_i32(addr++, null, [
             decodeOpcode(glulxercise, 0x00012f7).v,  // add  03 fc Fr:00
             g.return_(g.localVariable(0))
         ]),
@@ -73,11 +73,19 @@ const cases: any[][] = [
     ],
     [
         "decode_compressed_string_1d279",
-        gluxercise => g.function_i32_i32(1, null, [
+        gluxercise => g.function_i32_i32(addr++, null, [
             g.streamstr(g.const_(0x0001d279)),
             g.return_(g.localVariable(0))
         ]),
         0, 0, "Nothing happens."
+    ],
+    [
+        "callfii_stack_function_0x1x981",
+        gluxercise => g.function_i32_i32_i32(addr++, null, [
+            g.callf(g.const_(0x1c981), [g.localVariable(0), g.localVariable(4)], g.discard),
+            g.return_(g.localVariable(4))
+        ]),
+        [0x80, 88], 88, "X"  // 0x80 = glk_putchar, 88 => X
     ]
 ].concat(test_cases)
 
