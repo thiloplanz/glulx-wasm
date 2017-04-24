@@ -62,7 +62,7 @@ export const vmlib_imports = [
 
 
 const STACK_START = 0
-const STACK_POINTER = 1
+export const STACK_POINTER = 1
 const RAMSTART = 2
 const ENDMEM = 3
 const IOSYS = 4
@@ -71,7 +71,7 @@ const IOROCK = 5
 const arg0 = c.get_local(c.i32, 0)
 const arg1 = c.get_local(c.i32, 1)
 
-const SP = c.get_global(c.i32, STACK_POINTER)
+export const SP = c.get_global(c.i32, STACK_POINTER)
 
 function io_system_switch(glk: Op<Void>[], filter: Op<Void>[], fyrevm: Op<Void>[]) {
     const IO_SYS_GLK = c.i32.const(2)

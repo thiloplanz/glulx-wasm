@@ -21,7 +21,15 @@ const {
 const var0 = g.localVariable(0)
 
 const zero = varuint32(0)
+const one = varuint32(1)
 const i32_zero = c.i32.const(0)
+
+// internal local variables use i64, mostly to make sure they don't get mixed up
+// with Glulx local variables (those are i32)
+const internalLocals = [
+    c.local_entry(one, c.i64)
+    // 0: call frame pointer (when a function call returns, reset stack pointer to here)
+]
 
 function function_body(opcodes: Opcode[], context: TranscodingContext, extraLocals: LocalEntry[] = []): FunctionBody {
     return c.function_body(extraLocals, opcodes.map(o => o.transcode(context)))
@@ -73,8 +81,9 @@ export function module(functions: GlulxFunction[], image: Uint8Array, ramStart: 
             image,
             ramStart,
             endMem,
-            stringTbl
-        }, (f.stackCalled ? [c.local_entry(c.varint32(f.localsCount), c.i32)] : []))))),
+            stringTbl,
+            currentFunctionLocalsCount: f.localsCount
+        }, (f.stackCalled ? [c.local_entry(c.varint32(f.localsCount), c.i32)].concat(internalLocals) : internalLocals))))),
         data_sec
     ])
 } 

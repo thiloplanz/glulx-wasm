@@ -277,9 +277,9 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
                 if (argCount != 1)
                     if (image[offset] != 0) throw new Error("only a single argument group is implemented")
                 offset += 2
+                localsCount = argCount
 
                 if (stackCalled) {
-                    localsCount = argCount
                     ftype = types.out
                 }
                 else switch (argCount) {

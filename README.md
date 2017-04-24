@@ -41,3 +41,16 @@ The runtime support library makes use of some WASM global variables to keep trac
 4:   iosys, mutable
 5:   iosys "rock", mutable
 ```
+
+### Local variables
+
+The i32 WASM local variables are directly mapped to the 32 bit local Glulx variables
+(other types of Glulx variables are not supported).
+
+After these (the count is the same as declared in the Glulx function header) follow
+internally used variables. Those are i64, mainly to prevent accidentally using them
+from Glulx code (the WASM type-checker will stop that).
+
+```
+0:   Frame pointer of the function that about to be called from this function. Used to reset the SP afterwards.
+```

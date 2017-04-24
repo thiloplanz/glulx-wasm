@@ -8,7 +8,7 @@
 
 import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module, AnyResult, AnyOp } from '../ast'
 import { uint32 } from '../basic-types'
-import { vmlib_call, types } from './vmlib'
+import { vmlib_call, types, SP, STACK_POINTER } from './vmlib'
 import { GlkSelector } from './host'
 import { StreamStr } from './strings'
 
@@ -19,7 +19,8 @@ export interface TranscodingContext {
     image: Uint8Array,
     ramStart: uint32,
     endMem: uint32,
-    stringTbl: uint32
+    stringTbl: uint32,
+    currentFunctionLocalsCount: uint32
 }
 
 export interface Transcodable {
@@ -68,19 +69,30 @@ class Callf implements Opcode {
                 return c.unreachable
             }
             if (context.stackCalledFunctions[address.v]) {
+                console.info(index, context.currentFunctionLocalsCount)
                 return c.void_block(
                     // push args in reverse order
                     args.slice().reverse().map(x => vmlib_call.push(x.transcode(context)))
                         .concat(
+                        // set called_frame_pointer
+                        c.set_local(context.currentFunctionLocalsCount + 0, c.i64.extend_u_i32(SP)),
                         // push arg count
                         vmlib_call.push(c.i32.const(args.length)),
                         // make the call
-                        result.transcode(context, c.call(c.i32, index, []))
-                        // TODO: clean up the stack (call args should have been removed)
+                        result.transcode(context, c.call(c.i32, index, [])),
+                        // clean up the stack (call args should have been removed)
+                        c.set_global(STACK_POINTER, c.i32.wrap_i64(c.get_local(c.i64, context.currentFunctionLocalsCount + 0)))
                         )
                 )
             }
-            return result.transcode(context, c.call(c.i32, index, args.map(x => x.transcode(context))))
+            return c.void_block([
+                // set called_frame_pointer
+                c.set_local(context.currentFunctionLocalsCount + 0, c.i64.extend_u_i32(SP)),
+                // make the call
+                result.transcode(context, c.call(c.i32, index, args.map(x => x.transcode(context)))),
+                // clean up the stack (call args should have been removed)
+                c.set_global(STACK_POINTER, c.i32.wrap_i64(c.get_local(c.i64, context.currentFunctionLocalsCount + 0)))
+            ])
         }
         return c.unreachable /* dynamic calls are not implemented */
     }
@@ -336,10 +348,10 @@ export const g = {
     },
 
     function_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
-        return new GlulxFunction(address, name, types.in_out, false, 0, opcodes)
+        return new GlulxFunction(address, name, types.in_out, false, 1, opcodes)
     },
 
     function_i32_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
-        return new GlulxFunction(address, name, types.in_in_out, false, 0, opcodes)
+        return new GlulxFunction(address, name, types.in_in_out, false, 2, opcodes)
     }
 }

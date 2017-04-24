@@ -97,12 +97,22 @@ const cases: any[] = [
     ],
     [
         g.function_i32_i32(addr++, "push/pop", [
+            g.add(var0, var0, g.push),   // push two, pop one, leaves one on the stack
             g.add(var0, var0, g.push),
             g.return_(g.pop)
         ]),
         1, 2,
         -1, -2,
         21, 42
+    ],
+    [
+        g.function_i32_i32(addr++, "call frame removed from stack upon return", [
+            g.copy(g.const_(42), g.push),
+            g.callf(g.const_(addr - 2), [var0], g.discard),
+            g.return_(g.pop)
+        ]),
+        1, 42,
+        -1, 42
     ],
     [
         g.function_i32_i32(addr++, "glk_put_char",
