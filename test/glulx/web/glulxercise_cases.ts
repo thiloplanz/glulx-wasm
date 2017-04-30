@@ -90,5 +90,19 @@ export const test_cases: any[][] = [
         [0, 0], 1, "0",
         [1, 1], 1, "1",
         [2, 3], 0, "2 (should be 3 FAIL)"
+    ],
+    [
+        "_0x00006997__add_two_numbers",
+        0x6997,
+        [0, 0], 0, null,
+        [10, 32], 42, null
+    ],
+    [
+        "stackCalled_0x000069a3_while_loop",
+        0x0069a3,
+        [], 0, null,
+        [1], 100, null,  // TODO: figure out what this function does
+        [10, 9], 100, null,
+        [17, 2, 3], 100, null,
     ]
 ]

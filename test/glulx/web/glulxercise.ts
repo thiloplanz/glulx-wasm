@@ -69,7 +69,7 @@ const cases: any[][] = [
             decodeOpcode(glulxercise, 0x00012f7).v,  // add  03 fc Fr:00
             g.return_(g.localVariable(0))
         ]),
-        88, 0xff, null
+        88, -1, null
     ],
     [
         "decode_compressed_string_1d279",

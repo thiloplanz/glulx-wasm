@@ -38,9 +38,45 @@ class IfThenElse implements Opcode {
         )
     }
 }
+class WhileLoop implements Opcode {
+    constructor(readonly cond: ConditionalJump, readonly body: Opcode[]) { }
+    transcode(context: TranscodingContext) {
+        let cond = this.cond.transcodeCondition(context)
+        return c.void_loop([c.if(c.void,
+            cond,
+            [c.br(0)],
+            this.body.map(x => x.transcode(context))
+        )]
+        )
+    }
+}
 
 const uint16 = read_uint16
 const uint32 = read_uint32
+
+// coerce uint32 number into  (signed!) int32 range
+function int32(image, offset): number {
+    let x = uint32(image, offset)
+    if (x >= 0x80000000) {
+        x = - (0xFFFFFFFF - x + 1);
+    }
+    return x;
+}
+function int16(image, offset): number {
+    let x = uint16(image, offset)
+    if (x >= 0x8000) {
+        x = - (0xFFFF - x + 1);
+    }
+    return x;
+}
+function int8(image, offset): number {
+    let x = image[offset]
+    if (x >= 0x80) {
+        x = - (0xFF - x + 1);
+    }
+    return x;
+}
+
 
 const const_zero = g.const_(0)
 
@@ -48,9 +84,11 @@ function decodeLoadOperand(code: number, image: Uint8Array, offset: number) {
     // TODO: opcode rule about address decoding format
     switch (code) {
         case 0x0: return new ParseResult(const_zero, offset)
-        case 0x1: return new ParseResult(g.const_(image[offset]), offset + 1)
-        case 0x2: return new ParseResult(g.const_(uint16(image, offset)), offset + 2)
-        case 0x3: return new ParseResult(g.const_(uint32(image, offset)), offset + 4)
+        case 0x1:  // -128 to 127 
+            return new ParseResult(g.const_(int8(image, offset)), offset + 1)
+        case 0x2: // -32768 to 32767
+            return new ParseResult(g.const_(int16(image, offset)), offset + 2)
+        case 0x3: return new ParseResult(g.const_(int32(image, offset)), offset + 4)
         case 0x5: return new ParseResult(g.memory(image[offset]), offset + 1)
         case 0x6: return new ParseResult(g.memory(uint16(image, offset)), offset + 2)
         case 0x7: return new ParseResult(g.memory(uint32(image, offset)), offset + 4)
@@ -191,6 +229,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x11:  // sub
             sig = decodeFunctionSignature_in_in_out(image, offset)
             return new ParseResult(g.sub(sig.a, sig.b, sig.x), sig.nextOffset)
+        case 0x12: // mul
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(g.mul(sig.a, sig.b, sig.x), sig.nextOffset)
         case 0x20:  // jump
             sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.jump(sig.a), sig.nextOffset)
@@ -200,6 +241,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x25:  // jne
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jne(sig.a, sig.b, sig.c), sig.nextOffset)
+        case 0x27: // jge
+            sig = decodeFunctionSignature_in_in_in(image, offset)
+            return new ParseResult(g.jge(sig.a, sig.b, sig.c), sig.nextOffset)
         case 0x31:  // return
             sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.return_(sig.a), sig.nextOffset)
@@ -251,6 +295,9 @@ function decodeOpcodes(image: Uint8Array, offset: number, endOffset: number): Pa
         if (opcode.v instanceof Return) {
             break
         }
+        if (opcode.v instanceof Jump) {
+            break
+        }
     }
     return new ParseResult(opcodes, offset);
 }
@@ -297,10 +344,28 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
             let condJump = bodyStart.v.find(op => op instanceof ConditionalJump) as ConditionalJump
             let lastOp = bodyStart.v[bodyStart.v.length - 1]
             if (!condJump) {
+                if (lastOp instanceof Jump) {
+                    const ret = lastOp.getConstantReturnValue()
+                    if (ret != null) {
+                        lastOp = ret
+                    } else {
+                        // maybe the next one is a return?
+                        let nextOp = decodeOpcode(image, bodyStart.nextOffset)
+                        if (nextOp.v instanceof Return) {
+                            lastOp = nextOp.v
+                            bodyStart.v.push(lastOp)
+                            bodyStart = {
+                                v: bodyStart.v,
+                                nextOffset: nextOp.nextOffset
+                            }
+                        }
+                    }
+                }
                 if (lastOp instanceof Return) {
                     return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
                         ftype, stackCalled, localsCount, bodyStart.v), bodyStart.nextOffset)
                 }
+
                 throw new Error("function body does not end in Return")
             }
 
@@ -315,19 +380,40 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
                         return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
                             ftype, stackCalled, localsCount, bodyStart.v), bodyStart.nextOffset)
                     }
-                    // if/then/else ?
-                    // does the jump go after the already parse opcodes? That would be "then"
                     const indexOfJump = bodyStart.v.indexOf(condJump)
                     const condJumpNextOffset = bodyStart.v[indexOfJump + 1].offset
+
+
+                    // if/then/else ?
+                    // does the jump go after the already parse opcodes? That would be "then"
                     if (jump + condJumpNextOffset - 2 >= bodyStart.nextOffset) {
-                        let thenBlock = decodeOpcodes(image, jump + condJumpNextOffset - 2, THE_END)
                         let elseBlock = bodyStart.v.slice(indexOfJump + 1)
-                        console.info(indexOfJump, elseBlock)
-                        bodyStart.v[indexOfJump] = new IfThenElse(condJump, thenBlock.v, elseBlock)
+                        let thenBlock = decodeOpcodes(image, jump + condJumpNextOffset - 2, THE_END)
+
+                        let newBody = bodyStart.v.slice(0, indexOfJump)
+                        // loop back to the conditional at the end of "else" ? That would be a while loop
+                        if (lastOp instanceof Jump &&
+                            lastOp.getConstantJumpTarget(bodyStart.nextOffset) == bodyStart.v[indexOfJump].offset) {
+                            elseBlock.pop() // remove the jump, let it loop
+                            newBody.push(new WhileLoop(condJump, elseBlock))
+                            newBody = newBody.concat(thenBlock.v)
+                        }
+                        else {
+                            newBody.push(new IfThenElse(condJump, thenBlock.v, elseBlock))
+                        }
+
+
                         // TODO: recursively also check for more nested conditionals
-                        const dummyReturnNeeded = g.return_(g.const_(98))  // FF can do without? Chrome needs it?
+                        if (newBody[newBody.length - 1] instanceof Return) {
+
+                        } else {
+                            const dummyReturnNeeded = g.return_(g.const_(98))  // FF can do without? Chrome needs it?
+                            newBody.push(dummyReturnNeeded)
+                        }
+
+
                         return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
-                            ftype, stackCalled, localsCount, bodyStart.v.slice(0, indexOfJump + 1).concat(dummyReturnNeeded)), bodyStart.nextOffset)
+                            ftype, stackCalled, localsCount, newBody), bodyStart.nextOffset)
                     }
                 }
             }

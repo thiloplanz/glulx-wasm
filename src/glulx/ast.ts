@@ -139,6 +139,7 @@ export class Jump implements Opcode {
             if (v.v == 0) return return_zero
             if (v.v == 1) return return_one
             if (v.v == 2) return c.nop
+            console.error("actual jumps are not implemented, cannot go to " + v.v)
             return c.unreachable /* actual jumps are not implemented*/
         }
         const tv = v.transcode(context)
@@ -152,6 +153,23 @@ export class Jump implements Opcode {
         c.unreachable /* actual jumps are not implemented*/
         ])
 
+    }
+    getConstantJumpTarget(baseAddress: uint32): uint32 {
+        const { v } = this
+        if (v instanceof Constant) {
+            if (v.v == 0) return null
+            if (v.v == 1) return null
+            return baseAddress + v.v - 2
+        }
+        return null
+    }
+    getConstantReturnValue(): Return {
+        const { v } = this
+        if (v instanceof Constant) {
+            if (v.v == 0) return new Return(v)
+            if (v.v == 1) return new Return(v)
+        }
+        return null
     }
 }
 
@@ -180,6 +198,11 @@ class Add implements Opcode {
 class Sub implements Opcode {
     constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
     transcode(context) { return this.x.transcode(context, c.i32.sub(this.a.transcode(context), this.b.transcode(context))) }
+}
+
+class Mul implements Opcode {
+    constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
+    transcode(context) { return this.x.transcode(context, c.i32.mul(this.a.transcode(context), this.b.transcode(context))) }
 }
 
 class Copy implements Opcode {
@@ -268,6 +291,8 @@ const _jz = c.i32.eqz.bind(c.i32)
 
 const _jne = c.i32.ne.bind(c.i32)
 
+const _jge = c.i32.ge_s.bind(c.i32)
+
 export const g = {
     const_(v: uint32): Constant { return new Constant(v) },
 
@@ -302,6 +327,8 @@ export const g = {
     add(a: LoadOperandType, b: LoadOperandType, x: StoreOperandType): Opcode { return new Add(a, b, x) },
 
     sub(a: LoadOperandType, b: LoadOperandType, x: StoreOperandType): Opcode { return new Sub(a, b, x) },
+
+    mul(a: LoadOperandType, b: LoadOperandType, x: StoreOperandType): Opcode { return new Mul(a, b, x) },
 
     copy(a: LoadOperandType, x: StoreOperandType): Opcode { return new Copy(a, x) },
 
@@ -345,6 +372,10 @@ export const g = {
 
     jne(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
         return new ConditionalJump(_jne, [a, b], vector)
+    },
+
+    jge(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+        return new ConditionalJump(_jge, [a, b], vector)
     },
 
     function_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
