@@ -14,6 +14,7 @@ import { uint32 } from '../basic-types'
 import { GlkSelector } from './host'
 
 export const types = {
+    in_in_in_out: c.func_type([c.i32, c.i32, c.i32], c.i32),
     in_in_out: c.func_type([c.i32, c.i32], c.i32),
     in_out: c.func_type([c.i32], c.i32),
     out: c.func_type([], c.i32),
@@ -21,7 +22,7 @@ export const types = {
     lookup: (type: FuncType) => all_types_indexes[all_types.findIndex(f => f == type)]
 }
 
-const all_types = [types.in_out, types.out, types.in, types.in_in_out]
+const all_types = [types.in_out, types.out, types.in, types.in_in_out, types.in_in_in_out]
 const all_types_indexes = all_types.map((x, i) => c.varuint32(i))
 
 export const type_section = c.type_section(all_types)
@@ -73,6 +74,8 @@ const arg1 = c.get_local(c.i32, 1)
 
 export const SP = c.get_global(c.i32, STACK_POINTER)
 
+export const GETENDMEM = c.i32.wrap_i64(c.get_global(c.i64, ENDMEM))
+
 function io_system_switch(glk: Op<Void>[], filter: Op<Void>[], fyrevm: Op<Void>[]) {
     const IO_SYS_GLK = c.i32.const(2)
 
@@ -102,6 +105,12 @@ const minus = c.i32.const("-".charCodeAt(0))
 const ten = c.i32.const(10)
 
 
+function guard_endmem(addr: Op<I32>, body: Op<I32>): Op<I32> {
+    // after ENDMEM?
+    return c.if(c.i32, c.i64.ge_u(c.i64.add(c.i64.const(3), c.i64.extend_u_i32(addr)), c.get_global(c.i64, ENDMEM)),
+        [c.unreachable], [body])
+}
+
 const lib = [
     // 0: push value
     [types.in_out, c.function_body([], [
@@ -125,12 +134,11 @@ const lib = [
         const a0 = c.i32.load8_u(c.align8, c.i32.add(arg0, c.i32.const(3)))
 
         return [
-            // after ENDMEM?
-            c.if(c.void, c.i64.ge_u(c.i64.add(c.i64.const(3), c.i64.extend_u_i32(arg0)), c.get_global(c.i64, ENDMEM)),
-                [c.unreachable]),
-            c.i32.add(
-                c.i32.add(c.i32.shl(a1, eightBits), a0),
-                c.i32.shl(c.i32.add(c.i32.shl(a3, eightBits), a2), sixteenBits))
+            guard_endmem(arg0,
+                c.i32.add(
+                    c.i32.add(c.i32.shl(a1, eightBits), a0),
+                    c.i32.shl(c.i32.add(c.i32.shl(a3, eightBits), a2), sixteenBits))
+            )
         ]
     }())],
     // 3: write to memory
@@ -267,6 +275,8 @@ export const vmlib_call = {
 
     setiosys: function (sys: Op<I32>, rock: Op<I32>) {
         return c.void_block([c.set_global(IOSYS, sys), c.set_global(IOROCK, rock)])
-    }
+    },
+
+    read_uint8: function (addr: Op<I32>): Op<I32> { return guard_endmem(addr, c.i32.load8_u(c.align8, addr)) }
 
 }

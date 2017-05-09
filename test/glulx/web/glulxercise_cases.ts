@@ -104,5 +104,10 @@ export const test_cases: any[][] = [
         [1], 100, null,  // TODO: figure out what this function does
         [10, 9], 100, null,
         [17, 2, 3], 100, null,
+    ],
+    [
+        "_0x0001c307_getmemsize_aload",
+        0x01c307,
+        [1, 0, 0], 0, null,   // a < 24
     ]
 ]

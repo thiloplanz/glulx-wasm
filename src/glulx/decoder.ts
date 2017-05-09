@@ -177,6 +177,14 @@ function decodeFunctionSignature_in(image: Uint8Array, offset: number) {
     }
 }
 
+function decodeFunctionSignature_out(image: Uint8Array, offset: number) {
+    const sig = image[offset]
+    let a = decodeStoreOperand(0x0F & sig, image, offset + 1)
+    return {
+        out: a.v, nextOffset: a.nextOffset
+    }
+}
+
 function decodeFunctionSignature_in_out(image: Uint8Array, offset: number) {
     const sig = image[offset]
     let a = decodeLoadOperand(0x0F & sig, image, offset + 1)
@@ -241,15 +249,24 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x25:  // jne
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jne(sig.a, sig.b, sig.c), sig.nextOffset)
+        case 0x26:  // jlt
+            sig = decodeFunctionSignature_in_in_in(image, offset)
+            return new ParseResult(g.jlt(sig.a, sig.b, sig.c), sig.nextOffset)
         case 0x27: // jge
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jge(sig.a, sig.b, sig.c), sig.nextOffset)
+        case 0x2b: // jgeu
+            sig = decodeFunctionSignature_in_in_in(image, offset)
+            return new ParseResult(g.jgeu(sig.a, sig.b, sig.c), sig.nextOffset)
         case 0x31:  // return
             sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.return_(sig.a), sig.nextOffset)
         case 0x40:  // copy
             sig = decodeFunctionSignature_in_out(image, offset)
             return new ParseResult(g.copy(sig.a, sig.out), sig.nextOffset)
+        case 0x4a: // aloadb
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(g.aloadb(sig.a, sig.b, sig.x), sig.nextOffset)
         case 0x70: // streamchar
             sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.streamchar(sig.a), sig.nextOffset)
@@ -259,6 +276,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x72: // streamstr
             sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.streamstr(sig.a), sig.nextOffset)
+        case 0x102: // getmemsize
+            sig = decodeFunctionSignature_out(image, offset)
+            return new ParseResult(g.getmemsize(sig.out), sig.nextOffset)
         case 0x130: // glk
             sig = decodeFunctionSignature_in_in_out(image, offset)
             return new ParseResult(new GlkCall(sig.a, sig.b, sig.x), sig.nextOffset)
@@ -335,6 +355,7 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
                     case 0: ftype = types.out; break;
                     case 1: ftype = types.in_out; break;
                     case 2: ftype = types.in_in_out; break;
+                    case 3: ftype = types.in_in_in_out; break;
                     default: throw new Error("unsupported number of arguments: " + argCount)
                 }
 

@@ -8,7 +8,7 @@
 
 import { c, sect_id, N, I32, Void, Op, FunctionBody, FuncType, VarUint32, Module, AnyResult, AnyOp } from '../ast'
 import { uint32 } from '../basic-types'
-import { vmlib_call, types, SP, STACK_POINTER } from './vmlib'
+import { vmlib_call, types, SP, STACK_POINTER, GETENDMEM } from './vmlib'
 import { GlkSelector } from './host'
 import { StreamStr } from './strings'
 
@@ -120,6 +120,13 @@ class VmLibCall implements Opcode {
     }
 }
 
+class CopyNative implements Opcode {
+    constructor(private readonly value: Op<I32>, private readonly out: StoreOperandType) { }
+    transcode(context: TranscodingContext) {
+        return this.out.transcode(context, this.value)
+    }
+}
+
 const zero = c.i32.const(0)
 const one = c.i32.const(1)
 const two = c.i32.const(2)
@@ -216,6 +223,23 @@ export class Constant implements LoadOperandType {
     transcode() { return c.i32.const(this.v) }
 }
 
+// TODO refactor this Expression thing. Now it is super-ugly and roundabout.
+
+/** This allows to treat a whole expression (calculation result) as if it
+ * were a LoadOperand. 
+ */
+class Expression implements LoadOperandType {
+    constructor(readonly v: Opcode /** must store to getExpression! */) { }
+    transcode(context) { return this.v.transcode(context) as Op<I32> }
+}
+/**
+ * used as a dummy StoreOperandType to capture an opcode's result
+ */
+class ExpressionAdaptor implements StoreOperandType {
+    transcode(context: TranscodingContext, input: Op<I32>): any { return input }
+}
+
+const getExpression = new ExpressionAdaptor
 
 export function read_uint16(image: Uint8Array, offset: number) {
     return image[offset] * 256 + image[offset + 1]
@@ -280,6 +304,10 @@ class Discard implements StoreOperandType {
     transcode(context: TranscodingContext, input: Op<I32>) { return c.drop(c.void_, input) }
 }
 
+class ReadUInt8 implements LoadOperandType {
+    constructor(private readonly addr: LoadOperandType) { }
+    transcode(context: TranscodingContext) { return vmlib_call.read_uint8(this.addr.transcode(context)) }
+}
 
 const discard: StoreOperandType = new Discard
 
@@ -292,6 +320,10 @@ const _jz = c.i32.eqz.bind(c.i32)
 const _jne = c.i32.ne.bind(c.i32)
 
 const _jge = c.i32.ge_s.bind(c.i32)
+
+const _jgeu = c.i32.ge_u.bind(c.i32)
+
+const _jlt = c.i32.lt_s.bind(c.i32)
 
 export const g = {
     const_(v: uint32): Constant { return new Constant(v) },
@@ -364,6 +396,8 @@ export const g = {
 
     setiosys(sys: LoadOperandType, rock: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.setiosys, [sys, rock], null) },
 
+    getmemsize(out: StoreOperandType): Opcode { return new CopyNative(GETENDMEM, out) },
+
     jump(v: LoadOperandType): Opcode { return new Jump(v) },
 
     jz(condition: LoadOperandType, vector: LoadOperandType): Opcode {
@@ -376,6 +410,19 @@ export const g = {
 
     jge(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
         return new ConditionalJump(_jge, [a, b], vector)
+    },
+
+    jgeu(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+        return new ConditionalJump(_jgeu, [a, b], vector)
+    },
+
+    jlt(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+        return new ConditionalJump(_jlt, [a, b], vector)
+    },
+
+    aloadb(a: LoadOperandType, i: LoadOperandType, out: StoreOperandType): Opcode {
+        const addr = new Add(a, i, getExpression)
+        return new Copy(new ReadUInt8(new Expression(addr)), out)
     },
 
     function_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
