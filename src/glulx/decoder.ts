@@ -255,6 +255,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x27: // jge
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jge(sig.a, sig.b, sig.c), sig.nextOffset)
+        case 0x28: // jgt
+            sig = decodeFunctionSignature_in_in_in(image, offset)
+            return new ParseResult(g.jgt(sig.a, sig.b, sig.c), sig.nextOffset)
         case 0x2b: // jgeu
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jgeu(sig.a, sig.b, sig.c), sig.nextOffset)
@@ -264,6 +267,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x40:  // copy
             sig = decodeFunctionSignature_in_out(image, offset)
             return new ParseResult(g.copy(sig.a, sig.out), sig.nextOffset)
+        case 0x48: // aload
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(g.aload(sig.a, sig.b, sig.x), sig.nextOffset)
         case 0x4a: // aloadb
             sig = decodeFunctionSignature_in_in_out(image, offset)
             return new ParseResult(g.aloadb(sig.a, sig.b, sig.x), sig.nextOffset)
@@ -361,85 +367,100 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
 
             }
             let bodyStart = decodeOpcodes(image, offset, THE_END)
-            // if there are no conditional jumps in there and it ends with a return, we are good
-            let condJump = bodyStart.v.find(op => op instanceof ConditionalJump) as ConditionalJump
+
+            // look at all conditional jumps, and try to replace them with some "pattern"
+            let condJumps = bodyStart.v.filter(op => op instanceof ConditionalJump) as ConditionalJump[]
+            if (condJumps.length > 0) {
+                bodyStart = fixupConditionalJumps(image, bodyStart, condJumps)
+            }
+            // the block needs to end with a return
+            // sometimes there are dynamic non-conditional jumps that actually return, followed
+            // by a dummy or fallthrough return
+            bodyStart = fixupFinalReturn(image, bodyStart)
             let lastOp = bodyStart.v[bodyStart.v.length - 1]
-            if (!condJump) {
-                if (lastOp instanceof Jump) {
-                    const ret = lastOp.getConstantReturnValue()
-                    if (ret != null) {
-                        lastOp = ret
-                    } else {
-                        // maybe the next one is a return?
-                        let nextOp = decodeOpcode(image, bodyStart.nextOffset)
-                        if (nextOp.v instanceof Return) {
-                            lastOp = nextOp.v
-                            bodyStart.v.push(lastOp)
-                            bodyStart = {
-                                v: bodyStart.v,
-                                nextOffset: nextOp.nextOffset
-                            }
-                        }
-                    }
-                }
-                if (lastOp instanceof Return) {
-                    return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
-                        ftype, stackCalled, localsCount, bodyStart.v), bodyStart.nextOffset)
-                }
 
-                throw new Error("function body does not end in Return")
+            if (lastOp instanceof Return) {
+                return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
+                    ftype, stackCalled, localsCount, bodyStart.v), bodyStart.nextOffset)
             }
 
-            console.info("got a conditional jump!", condJump, funcOffset)
-            // if there was a conditional jump, everything after it is actually the "else"
-            let vector = condJump.vector
-            if (vector instanceof Constant) {
-                let jump = vector.v
-                if (jump >= 0) {
-                    if (jump < 3) {
-                        // return or nop
-                        return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
-                            ftype, stackCalled, localsCount, bodyStart.v), bodyStart.nextOffset)
-                    }
-                    const indexOfJump = bodyStart.v.indexOf(condJump)
-                    const condJumpNextOffset = bodyStart.v[indexOfJump + 1].offset
-
-
-                    // if/then/else ?
-                    // does the jump go after the already parse opcodes? That would be "then"
-                    if (jump + condJumpNextOffset - 2 >= bodyStart.nextOffset) {
-                        let elseBlock = bodyStart.v.slice(indexOfJump + 1)
-                        let thenBlock = decodeOpcodes(image, jump + condJumpNextOffset - 2, THE_END)
-
-                        let newBody = bodyStart.v.slice(0, indexOfJump)
-                        // loop back to the conditional at the end of "else" ? That would be a while loop
-                        if (lastOp instanceof Jump &&
-                            lastOp.getConstantJumpTarget(bodyStart.nextOffset) == bodyStart.v[indexOfJump].offset) {
-                            elseBlock.pop() // remove the jump, let it loop
-                            newBody.push(new WhileLoop(condJump, elseBlock))
-                            newBody = newBody.concat(thenBlock.v)
-                        }
-                        else {
-                            newBody.push(new IfThenElse(condJump, thenBlock.v, elseBlock))
-                        }
-
-
-                        // TODO: recursively also check for more nested conditionals
-                        if (newBody[newBody.length - 1] instanceof Return) {
-
-                        } else {
-                            const dummyReturnNeeded = g.return_(g.const_(98))  // FF can do without? Chrome needs it?
-                            newBody.push(dummyReturnNeeded)
-                        }
-
-
-                        return new ParseResult(new GlulxFunction(funcOffset, name || ("_" + funcOffset.toString()),
-                            ftype, stackCalled, localsCount, newBody), bodyStart.nextOffset)
-                    }
-                }
-            }
-
-            console.error("got a conditional jump, but did not detect a common pattern", condJump)
-            throw new Error("got a conditional jump, but did not detect a common pattern")
+            console.error("function body does not end in Return", lastOp, bodyStart)
+            throw new Error("function body does not end in Return")
     }
+}
+
+function fixupFinalReturn(image: Uint8Array, block: ParseResult<Opcode[]>): ParseResult<Opcode[]> {
+    // if it ends with a return, we are good
+    let lastOp = block.v[block.v.length - 1]
+    if (lastOp instanceof Jump) {
+        const ret = lastOp.getConstantReturnValue()
+        if (ret != null) {
+            block.v.pop()
+            block.v.push(ret)
+            return block
+        } else {
+            // maybe the next one is a return?
+            let nextOp = decodeOpcode(image, block.nextOffset)
+            if (nextOp.v instanceof Return) {
+                lastOp = nextOp.v
+                block.v.push(lastOp)
+                return {
+                    v: block.v,
+                    nextOffset: nextOp.nextOffset
+                }
+            }
+        }
+    }
+    return block
+}
+
+function fixupConditionalJumps(image: Uint8Array, block: ParseResult<Opcode[]>, condJumps: ConditionalJump[]): ParseResult<Opcode[]> {
+    for (let condJump of condJumps) {
+        let vector = condJump.vector
+        if (vector instanceof Constant) {
+            let jump = vector.v
+            if (jump >= 0) {
+                if (jump < 3) {
+                    // return or nop, do nothing, the runtime can handle it
+                } else {
+                    // forward jump: decode the block where it goes to
+                    const indexOfJump = block.v.indexOf(condJump)
+                    const condJumpNextOffset = block.v[indexOfJump + 1].offset
+                    let thenBlock = decodeOpcodes(image, jump + condJumpNextOffset - 2, THE_END)
+                    let nestedConds = thenBlock.v.filter(op => op instanceof ConditionalJump) as ConditionalJump[]
+                    if (nestedConds.length > 0) {
+                        thenBlock = fixupConditionalJumps(image, thenBlock, nestedConds)
+                    }
+                    // assume the then returns. Then we don't need "else"
+                    thenBlock = fixupFinalReturn(image, thenBlock)
+                    let lastOp = thenBlock.v[thenBlock.v.length - 1]
+                    if (lastOp instanceof Return) {
+                        // loop back to the conditional at the end of "else" ? That would be a while loop
+                        lastOp = block.v[block.v.length - 1]
+                        if (lastOp instanceof Jump &&
+                            lastOp.getConstantJumpTarget(block.nextOffset) == condJump.offset) {
+                            // remove the jump, let it loop
+                            console.info("WHILE", lastOp, condJump, block, thenBlock)
+                            block.v.pop()
+                            block.v.splice(indexOfJump, block.v.length - indexOfJump, new WhileLoop(condJump, block.v.slice(indexOfJump + 1)))
+                            block.v.push(...thenBlock.v)
+                        } else {
+                            // just replace the conditional jump with If-then
+                            block.v[indexOfJump] = new IfThenElse(condJump, thenBlock.v, [])
+                        }
+                    } else {
+                        throw new Error("thenBlock did not end in Return")
+                    }
+                }
+            } else {
+                console.error("got a conditional jump backwards, only forward jumps are supported", condJump)
+                throw new Error("got a conditional jump backwards, only forward jumps are supported")
+            }
+        } else {
+            console.error("got a dynamic jump vector on a conditional jump", condJump)
+            throw new Error("got a dynamic jump vector on a conditional jump")
+        }
+    }
+
+    return block
 }

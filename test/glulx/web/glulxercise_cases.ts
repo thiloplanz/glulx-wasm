@@ -109,5 +109,6 @@ export const test_cases: any[][] = [
         "_0x0001c307_getmemsize_aload",
         0x01c307,
         [1, 0, 0], 0, null,   // a < 24
+        [0xFFFFFF, 0, 0], 0, null // a > ENDMEM
     ]
 ]

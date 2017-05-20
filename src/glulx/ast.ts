@@ -309,6 +309,11 @@ class ReadUInt8 implements LoadOperandType {
     transcode(context: TranscodingContext) { return vmlib_call.read_uint8(this.addr.transcode(context)) }
 }
 
+class ReadUInt32 implements LoadOperandType {
+    constructor(private readonly addr: LoadOperandType) { }
+    transcode(context: TranscodingContext) { return vmlib_call.read_uint32(this.addr.transcode(context)) }
+}
+
 const discard: StoreOperandType = new Discard
 
 const pop: LoadOperandType = new Pop
@@ -324,6 +329,8 @@ const _jge = c.i32.ge_s.bind(c.i32)
 const _jgeu = c.i32.ge_u.bind(c.i32)
 
 const _jlt = c.i32.lt_s.bind(c.i32)
+
+const _jgt = c.i32.gt_s.bind(c.i32)
 
 export const g = {
     const_(v: uint32): Constant { return new Constant(v) },
@@ -418,6 +425,16 @@ export const g = {
 
     jlt(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
         return new ConditionalJump(_jlt, [a, b], vector)
+    },
+
+    jgt(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+        return new ConditionalJump(_jgt, [a, b], vector)
+    },
+
+    aload(a: LoadOperandType, i: LoadOperandType, out: StoreOperandType): Opcode {
+        const indx = new Mul(i, new Constant(4), getExpression)
+        const addr = new Add(a, new Expression(indx), getExpression)
+        return new Copy(new ReadUInt32(new Expression(addr)), out)
     },
 
     aloadb(a: LoadOperandType, i: LoadOperandType, out: StoreOperandType): Opcode {
