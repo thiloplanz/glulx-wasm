@@ -105,7 +105,7 @@ class Callf implements Opcode {
         if (address instanceof Constant) {
             const index = context.callableFunctions[address.v]
             if (!index) {
-                console.error(`unknown function being called: ${address}`)
+                console.error("unknown function being called", address)
                 return c.unreachable
             }
             if (context.stackCalledFunctions[address.v]) {
@@ -340,6 +340,8 @@ const push: StoreOperandType = new Push
 
 const _jz = c.i32.eqz.bind(c.i32)
 
+const _jeq = c.i32.eq.bind(c.i32)
+
 const _jne = c.i32.ne.bind(c.i32)
 
 const _jge = c.i32.ge_s.bind(c.i32)
@@ -427,6 +429,10 @@ export const g = {
 
     jz(condition: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jz, [condition], vector)
+    },
+
+    jeq(a: Expression, b: Expression, vector: Expression): Opcode {
+        return new ConditionalJump(_jeq, [a, b], vector)
     },
 
     jne(a: Expression, b: Expression, vector: Expression): Opcode {

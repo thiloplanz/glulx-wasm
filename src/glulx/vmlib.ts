@@ -277,6 +277,12 @@ export const vmlib_call = {
         return c.void_block([c.set_global(IOSYS, sys), c.set_global(IOROCK, rock)])
     },
 
-    read_uint8: function (addr: Op<I32>): Op<I32> { return guard_endmem(addr, c.i32.load8_u(c.align8, addr)) }
+    read_uint8: function (addr: Op<I32>): Op<I32> { return guard_endmem(addr, c.i32.load8_u(c.align8, addr)) },
+
+    trap: function (message: string) {
+        // TODO: build a string table into the image to be able to show error at runtime
+        console.error("TRAP!", message)
+        return c.unreachable
+    }
 
 }

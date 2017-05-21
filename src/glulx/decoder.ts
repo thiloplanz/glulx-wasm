@@ -246,6 +246,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x22:  // jz
             sig = decodeFunctionSignature_in_in(image, offset)
             return new ParseResult(g.jz(sig.a, sig.b), sig.nextOffset)
+        case 0x24:  // jeq
+            sig = decodeFunctionSignature_in_in_in(image, offset)
+            return new ParseResult(g.jeq(sig.a, sig.b, sig.c), sig.nextOffset)
         case 0x25:  // jne
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jne(sig.a, sig.b, sig.c), sig.nextOffset)

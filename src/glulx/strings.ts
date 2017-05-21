@@ -75,6 +75,6 @@ export class StreamStr implements Opcode {
         if (addr instanceof Constant) {
             return streamString(context, addr.v)
         }
-        throw new Error("dynamic or RAM streamstr not yet implemented")
+        return vmlib_call.trap("dynamic or RAM streamstr not yet implemented")
     }
 }
