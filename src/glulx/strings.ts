@@ -6,7 +6,7 @@
 // String handling functions, in particular decoding compressed Strings and assembling the String segment
 
 import { uint32, uint7 } from '../basic-types'
-import { TranscodingContext, Opcode, LoadOperandType, Constant, read_uint32 } from './ast'
+import { TranscodingContext, Opcode, Expression, Constant, read_uint32 } from './ast'
 import { vmlib_call } from './vmlib'
 import { Op, Void, c } from '../ast'
 
@@ -69,7 +69,7 @@ function decodeString(context: TranscodingContext, nodeAddr: uint32, nextByte: u
 }
 
 export class StreamStr implements Opcode {
-    constructor(private readonly addr: LoadOperandType) { }
+    constructor(private readonly addr: Expression) { }
     transcode(context: TranscodingContext) {
         const { addr } = this
         if (addr instanceof Constant) {

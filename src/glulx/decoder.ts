@@ -7,7 +7,7 @@
 // Decode Glulx game images to AST
 
 import {
-    g, LoadOperandType, StoreOperandType, Opcode,
+    g, StoreOperandType, Opcode,
     Constant, GlulxFunction, Return, read_uint16, read_uint32,
     Jump, ConditionalJump, TranscodingContext, GlkCall
 } from './ast'

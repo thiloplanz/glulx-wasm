@@ -27,18 +27,55 @@ export interface Transcodable {
     transcode(context: TranscodingContext): N
 }
 
-export interface Opcode extends Transcodable {
-    offset?: uint32    // if decoded from an image, the offset of this opcode
-    transcode(context: TranscodingContext): AnyOp
+/**
+ * We break up the Glulx opcodes into two parts:
+ * an Expression (that usually requires load operands)
+ * and a Store (which usually requires a store operand).
+ * 
+ * That way, we can re-use the Expression part to build
+ * more complex, nested expressions (which is something 
+ * the WebAssembly allows for). For example, we can put
+ * a complex Expression where a load operand is required
+ * (care must be taken about execution order and side-effects)
+ * 
+ * Note that Expressions do not have to be "pure"
+ * (i.e. they can be indetermistic and have side effects)
+ * 
+ * Expressions all return an I32
+ */
 
-}
-
-export interface LoadOperandType extends Transcodable {
+export interface Expression extends Transcodable {
     transcode(context: TranscodingContext): Op<I32>
 }
 
+
+export interface Opcode extends Transcodable {
+    offset?: uint32    // if decoded from an image, the offset of this opcode
+    transcode(context: TranscodingContext): AnyOp
+}
+
+/**
+ * The "basic opcode" takes an Expression and a store operand.
+ * It evaluates the expression and stores it.
+ * That way, things like Add become more reusable in the form of an Expression
+ */
+class BasicOpcode implements Opcode {
+    constructor(private readonly expression: Expression, private readonly store: StoreOperandType) { }
+    transcode(context) { return this.store.transcode(context, this.expression) }
+}
+
+/**
+ * wrap a native (WASM) expression. This will be generated to implement some of the
+ * more low-level opcodes with inline assembly (as opposed to a VMlib call)
+ */
+
+class NativeExpression implements Expression {
+    constructor(private readonly expression: Op<I32>) { }
+    transcode() { return this.expression }
+}
+
 export interface StoreOperandType {
-    transcode(context: TranscodingContext, input: Op<I32>): Op<Void>
+    transcode(context: TranscodingContext, input: Expression): Op<Void>
 }
 
 export class GlulxFunction {
@@ -51,15 +88,18 @@ export class GlulxFunction {
         readonly opcodes: Opcode[]) { }
 }
 
-
-
 export class Return implements Opcode {
-    constructor(private readonly v: LoadOperandType) { }
-    transcode(context) { return c.return_(this.v.transcode(context)) }
+    constructor(readonly expression: Expression) { }
+    transcode(context) { return c.return_(this.expression.transcode(context)) }
+}
+
+class NativeCallExpression implements Expression {
+    constructor(private readonly functionIndex: VarUint32, private readonly args: Expression[]) { }
+    transcode(context) { return c.call(c.i32, this.functionIndex, this.args.map(x => x.transcode(context))) }
 }
 
 class Callf implements Opcode {
-    constructor(private readonly address: LoadOperandType, private readonly args: LoadOperandType[], private readonly result: StoreOperandType) { }
+    constructor(private readonly address: Expression, private readonly args: Expression[], private readonly result: StoreOperandType) { }
     transcode(context: TranscodingContext) {
         const { address, args, result } = this
         if (address instanceof Constant) {
@@ -79,7 +119,7 @@ class Callf implements Opcode {
                         // push arg count
                         vmlib_call.push(c.i32.const(args.length)),
                         // make the call
-                        result.transcode(context, c.call(c.i32, index, [])),
+                        result.transcode(context, new NativeCallExpression(index, [])),
                         // clean up the stack (call args should have been removed)
                         c.set_global(STACK_POINTER, c.i32.wrap_i64(c.get_local(c.i64, context.currentFunctionLocalsCount + 0)))
                         )
@@ -89,7 +129,7 @@ class Callf implements Opcode {
                 // set called_frame_pointer
                 c.set_local(context.currentFunctionLocalsCount + 0, c.i64.extend_u_i32(SP)),
                 // make the call
-                result.transcode(context, c.call(c.i32, index, args.map(x => x.transcode(context)))),
+                result.transcode(context, new NativeCallExpression(index, args)),
                 // clean up the stack (call args should have been removed)
                 c.set_global(STACK_POINTER, c.i32.wrap_i64(c.get_local(c.i64, context.currentFunctionLocalsCount + 0)))
             ])
@@ -98,17 +138,24 @@ class Callf implements Opcode {
     }
 }
 
+class GlkCallExpression implements Expression {
+    constructor(private readonly selector: Expression, private readonly argc: Expression) { }
+    transcode(context) { return vmlib_call.glk(this.selector.transcode(context), this.argc.transcode(context)) }
+}
+
+
+
 export class GlkCall implements Opcode {
-    constructor(private readonly selector: LoadOperandType, private readonly argc: LoadOperandType, private readonly result: StoreOperandType) { }
+    constructor(private readonly selector: Expression, private readonly argc: Expression, private readonly result: StoreOperandType) { }
     transcode(context: TranscodingContext) {
         const { selector, argc, result } = this
         // we pass this out to Javascript to dispatch (and get the parameters from the stack)
-        return result.transcode(context, vmlib_call.glk(selector.transcode(context), argc.transcode(context)))
+        return result.transcode(context, new GlkCallExpression(selector, argc))
     }
 }
 
 class VmLibCall implements Opcode {
-    constructor(private readonly call: (...args: Op<I32>[]) => Op<AnyResult>, private readonly args: LoadOperandType[], private readonly result: StoreOperandType) { }
+    constructor(private readonly call: (...args: Op<I32>[]) => Op<AnyResult>, private readonly args: Expression[], private readonly result: StoreOperandType) { }
     transcode(context: TranscodingContext) {
         const args = this.args.map(x => x.transcode(context))
         if (this.result == null) {
@@ -117,13 +164,6 @@ class VmLibCall implements Opcode {
         } else {
             return this.result.transcode(context, this.call.apply(null, args))
         }
-    }
-}
-
-class CopyNative implements Opcode {
-    constructor(private readonly value: Op<I32>, private readonly out: StoreOperandType) { }
-    transcode(context: TranscodingContext) {
-        return this.out.transcode(context, this.value)
     }
 }
 
@@ -138,7 +178,7 @@ const jump_vectors = [c.varuint32(0), c.varuint32(1), c.varuint32(3)]
 const real_jump = c.varuint32(2)
 
 export class Jump implements Opcode {
-    constructor(private readonly v: LoadOperandType) { }
+    constructor(private readonly v: Expression) { }
     transcode(context) {
         const v = this.v
         // optimization for constant jump vectors
@@ -181,7 +221,7 @@ export class Jump implements Opcode {
 }
 
 export class ConditionalJump implements Opcode {
-    constructor(private readonly comp: ((args: Op<I32>[]) => Op<I32>), private readonly args: LoadOperandType[], readonly vector: LoadOperandType) { }
+    constructor(private readonly comp: ((args: Op<I32>[]) => Op<I32>), private readonly args: Expression[], readonly vector: Expression) { }
     offset: uint32
     transcode(context) {
         const { vector } = this
@@ -197,49 +237,27 @@ export class ConditionalJump implements Opcode {
     }
 }
 
-class Add implements Opcode {
-    constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
-    transcode(context) { return this.x.transcode(context, c.i32.add(this.a.transcode(context), this.b.transcode(context))) }
-}
-
-class Sub implements Opcode {
-    constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
-    transcode(context) { return this.x.transcode(context, c.i32.sub(this.a.transcode(context), this.b.transcode(context))) }
-}
-
-class Mul implements Opcode {
-    constructor(private readonly a: LoadOperandType, private readonly b: LoadOperandType, private readonly x: StoreOperandType) { }
-    transcode(context) { return this.x.transcode(context, c.i32.mul(this.a.transcode(context), this.b.transcode(context))) }
-}
-
-class Copy implements Opcode {
-    constructor(private readonly a: LoadOperandType, private readonly x: StoreOperandType) { }
-    transcode(context) { return this.x.transcode(context, this.a.transcode(context)) }
+class Add implements Expression {
+    constructor(private readonly a: Expression, private readonly b: Expression) { }
+    transcode(context) { return c.i32.add(this.a.transcode(context), this.b.transcode(context)) }
 }
 
 
-export class Constant implements LoadOperandType {
+class Sub implements Expression {
+    constructor(private readonly a: Expression, private readonly b: Expression) { }
+    transcode(context) { return c.i32.sub(this.a.transcode(context), this.b.transcode(context)) }
+}
+
+class Mul implements Expression {
+    constructor(private readonly a: Expression, private readonly b: Expression) { }
+    transcode(context) { return c.i32.mul(this.a.transcode(context), this.b.transcode(context)) }
+}
+
+export class Constant implements Expression {
     constructor(readonly v: uint32) { }
     transcode() { return c.i32.const(this.v) }
 }
 
-// TODO refactor this Expression thing. Now it is super-ugly and roundabout.
-
-/** This allows to treat a whole expression (calculation result) as if it
- * were a LoadOperand. 
- */
-class Expression implements LoadOperandType {
-    constructor(readonly v: Opcode /** must store to getExpression! */) { }
-    transcode(context) { return this.v.transcode(context) as Op<I32> }
-}
-/**
- * used as a dummy StoreOperandType to capture an opcode's result
- */
-class ExpressionAdaptor implements StoreOperandType {
-    transcode(context: TranscodingContext, input: Op<I32>): any { return input }
-}
-
-const getExpression = new ExpressionAdaptor
 
 export function read_uint16(image: Uint8Array, offset: number) {
     return image[offset] * 256 + image[offset + 1]
@@ -249,7 +267,7 @@ export function read_uint32(image: Uint8Array, offset: number) {
     return image[offset] * 0x1000000 + image[offset + 1] * 0x10000 + image[offset + 2] * 0x100 + image[offset + 3]
 }
 
-class MemoryAccess implements LoadOperandType {
+class MemoryAccess implements Expression {
     constructor(readonly address: uint32) { }
     transcode(context: TranscodingContext): Op<I32> {
         // inline access to ROM 
@@ -263,12 +281,12 @@ class MemoryAccess implements LoadOperandType {
 
 class MemoryStore implements StoreOperandType {
     constructor(private readonly addr: uint32) { }
-    transcode(context: TranscodingContext, input: Op<I32>): Op<Void> {
-        return vmlib_call.store_uint32(c.i32.const(this.addr), input)
+    transcode(context: TranscodingContext, input: Expression): Op<Void> {
+        return vmlib_call.store_uint32(c.i32.const(this.addr), input.transcode(context))
     }
 }
 
-class RAMAccess implements LoadOperandType {
+class RAMAccess implements Expression {
     constructor(readonly address: uint32) { }
     transcode(context: TranscodingContext): Op<I32> {
         return vmlib_call.read_uint32(c.i32.const(this.address + context.ramStart))
@@ -277,46 +295,46 @@ class RAMAccess implements LoadOperandType {
 
 class RAMStore implements StoreOperandType {
     constructor(private readonly address: uint32) { }
-    transcode(context: TranscodingContext, input: Op<I32>): Op<Void> {
-        return vmlib_call.store_uint32(c.i32.const(this.address + context.ramStart), input)
+    transcode(context: TranscodingContext, input: Expression): Op<Void> {
+        return vmlib_call.store_uint32(c.i32.const(this.address + context.ramStart), input.transcode(context))
     }
 }
 
-class Pop implements LoadOperandType {
+class Pop implements Expression {
     transcode(): Op<I32> { return vmlib_call.pop }
 }
 
 class Push implements StoreOperandType {
-    transcode(context: TranscodingContext, input: Op<I32>): Op<Void> { return vmlib_call.push(input) }
+    transcode(context: TranscodingContext, input: Expression): Op<Void> { return vmlib_call.push(input.transcode(context)) }
 }
 
-class Local32 implements LoadOperandType {
+class Local32 implements Expression {
     constructor(private readonly v: uint32) { }
     transcode() { return c.get_local(c.i32, this.v) }
 }
 
 class StoreLocal32 implements StoreOperandType {
     constructor(private readonly v: uint32) { }
-    transcode(context: TranscodingContext, input: Op<I32>) { return c.set_local(this.v, input) }
+    transcode(context: TranscodingContext, input: Expression) { return c.set_local(this.v, input.transcode(context)) }
 }
 
 class Discard implements StoreOperandType {
-    transcode(context: TranscodingContext, input: Op<I32>) { return c.drop(c.void_, input) }
+    transcode(context: TranscodingContext, input: Expression) { return c.drop(c.void_, input.transcode(context)) }
 }
 
-class ReadUInt8 implements LoadOperandType {
-    constructor(private readonly addr: LoadOperandType) { }
+class ReadUInt8 implements Expression {
+    constructor(private readonly addr: Expression) { }
     transcode(context: TranscodingContext) { return vmlib_call.read_uint8(this.addr.transcode(context)) }
 }
 
-class ReadUInt32 implements LoadOperandType {
-    constructor(private readonly addr: LoadOperandType) { }
+class ReadUInt32 implements Expression {
+    constructor(private readonly addr: Expression) { }
     transcode(context: TranscodingContext) { return vmlib_call.read_uint32(this.addr.transcode(context)) }
 }
 
 const discard: StoreOperandType = new Discard
 
-const pop: LoadOperandType = new Pop
+const pop: Expression = new Pop
 
 const push: StoreOperandType = new Push
 
@@ -335,9 +353,9 @@ const _jgt = c.i32.gt_s.bind(c.i32)
 export const g = {
     const_(v: uint32): Constant { return new Constant(v) },
 
-    memory(address: uint32): LoadOperandType { return new MemoryAccess(address) },
+    memory(address: uint32): Expression { return new MemoryAccess(address) },
 
-    ram(address: uint32): LoadOperandType { return new RAMAccess(address) },
+    ram(address: uint32): Expression { return new RAMAccess(address) },
 
     pop: pop,
 
@@ -345,7 +363,7 @@ export const g = {
 
     discard: discard,
 
-    localVariable(index: uint32): LoadOperandType {
+    localVariable(index: uint32): Expression {
         if (index % 4 != 0) throw new Error(`invalid local variable offset ${index}`)
         return new Local32(index / 4)
     },
@@ -363,29 +381,29 @@ export const g = {
         return new RAMStore(addr)
     },
 
-    add(a: LoadOperandType, b: LoadOperandType, x: StoreOperandType): Opcode { return new Add(a, b, x) },
+    add(a: Expression, b: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(new Add(a, b), x) },
 
-    sub(a: LoadOperandType, b: LoadOperandType, x: StoreOperandType): Opcode { return new Sub(a, b, x) },
+    sub(a: Expression, b: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(new Sub(a, b), x) },
 
-    mul(a: LoadOperandType, b: LoadOperandType, x: StoreOperandType): Opcode { return new Mul(a, b, x) },
+    mul(a: Expression, b: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(new Mul(a, b), x) },
 
-    copy(a: LoadOperandType, x: StoreOperandType): Opcode { return new Copy(a, x) },
+    copy(a: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(a, x) },
 
-    return_(v: LoadOperandType): Opcode { return new Return(v) },
+    return_(v: Expression): Opcode { return new Return(v) },
 
-    callf(address: LoadOperandType, args: LoadOperandType[], result: StoreOperandType): Opcode {
+    callf(address: Expression, args: Expression[], result: StoreOperandType): Opcode {
         if (args.length > 3) throw new Error(`callf does not take more than three arguments, you gave me ${args.length}`)
         return new Callf(address, args, result)
     },
 
     glk: {
-        put_char: function (latin1: LoadOperandType) {
+        put_char: function (latin1: Expression) {
             return [
                 g.copy(latin1, g.push),
                 new GlkCall(g.const_(GlkSelector.put_char), g.const_(1), g.discard)
             ]
         },
-        put_buffer: function (offset: LoadOperandType, length: LoadOperandType) {
+        put_buffer: function (offset: Expression, length: Expression) {
             return [
                 g.copy(length, g.push),
                 g.copy(offset, g.push),
@@ -395,51 +413,50 @@ export const g = {
 
     },
 
-    streamchar(n: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.streamchar, [n], null) },
+    streamchar(n: Expression): Opcode { return new VmLibCall(vmlib_call.streamchar, [n], null) },
 
-    streamnum(n: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.streamnum, [n], null) },
+    streamnum(n: Expression): Opcode { return new VmLibCall(vmlib_call.streamnum, [n], null) },
 
-    streamstr(addr: LoadOperandType): Opcode { return new StreamStr(addr) },
+    streamstr(addr: Expression): Opcode { return new StreamStr(addr) },
 
-    setiosys(sys: LoadOperandType, rock: LoadOperandType): Opcode { return new VmLibCall(vmlib_call.setiosys, [sys, rock], null) },
+    setiosys(sys: Expression, rock: Expression): Opcode { return new VmLibCall(vmlib_call.setiosys, [sys, rock], null) },
 
-    getmemsize(out: StoreOperandType): Opcode { return new CopyNative(GETENDMEM, out) },
+    getmemsize(out: StoreOperandType): Opcode { return new BasicOpcode(new NativeExpression(GETENDMEM), out) },
 
-    jump(v: LoadOperandType): Opcode { return new Jump(v) },
+    jump(v: Expression): Opcode { return new Jump(v) },
 
-    jz(condition: LoadOperandType, vector: LoadOperandType): Opcode {
+    jz(condition: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jz, [condition], vector)
     },
 
-    jne(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+    jne(a: Expression, b: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jne, [a, b], vector)
     },
 
-    jge(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+    jge(a: Expression, b: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jge, [a, b], vector)
     },
 
-    jgeu(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+    jgeu(a: Expression, b: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jgeu, [a, b], vector)
     },
 
-    jlt(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+    jlt(a: Expression, b: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jlt, [a, b], vector)
     },
 
-    jgt(a: LoadOperandType, b: LoadOperandType, vector: LoadOperandType): Opcode {
+    jgt(a: Expression, b: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jgt, [a, b], vector)
     },
 
-    aload(a: LoadOperandType, i: LoadOperandType, out: StoreOperandType): Opcode {
-        const indx = new Mul(i, new Constant(4), getExpression)
-        const addr = new Add(a, new Expression(indx), getExpression)
-        return new Copy(new ReadUInt32(new Expression(addr)), out)
+    aload(a: Expression, i: Expression, out: StoreOperandType): Opcode {
+        const indx = new Mul(i, new Constant(4))
+        const addr = new Add(a, indx)
+        return new BasicOpcode(new ReadUInt32(addr), out)
     },
 
-    aloadb(a: LoadOperandType, i: LoadOperandType, out: StoreOperandType): Opcode {
-        const addr = new Add(a, i, getExpression)
-        return new Copy(new ReadUInt8(new Expression(addr)), out)
+    aloadb(a: Expression, i: Expression, out: StoreOperandType): Opcode {
+        return new BasicOpcode(new ReadUInt8(new Add(a, i)), out)
     },
 
     function_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
