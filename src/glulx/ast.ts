@@ -105,7 +105,7 @@ class Callf implements Opcode {
         if (address instanceof Constant) {
             const index = context.callableFunctions[address.v]
             if (!index) {
-                console.error("unknown function being called", address)
+                console.error("unknown function being called", address, context)
                 return c.unreachable
             }
             if (context.stackCalledFunctions[address.v]) {
@@ -242,7 +242,6 @@ class Add implements Expression {
     transcode(context) { return c.i32.add(this.a.transcode(context), this.b.transcode(context)) }
 }
 
-
 class Sub implements Expression {
     constructor(private readonly a: Expression, private readonly b: Expression) { }
     transcode(context) { return c.i32.sub(this.a.transcode(context), this.b.transcode(context)) }
@@ -251,6 +250,26 @@ class Sub implements Expression {
 class Mul implements Expression {
     constructor(private readonly a: Expression, private readonly b: Expression) { }
     transcode(context) { return c.i32.mul(this.a.transcode(context), this.b.transcode(context)) }
+}
+
+class Div implements Expression {
+    constructor(private readonly a: Expression, private readonly b: Expression) { }
+    transcode(context) { return c.i32.div_s(this.a.transcode(context), this.b.transcode(context)) }
+}
+
+class Neg implements Expression {
+    constructor(private readonly a: Expression) { }
+    transcode(context) { return c.i32.sub(zero, this.a.transcode(context)) }
+}
+
+class BitAnd implements Expression {
+    constructor(private readonly a: Expression, private readonly b: Expression) { }
+    transcode(context) { return c.i32.and(this.a.transcode(context), this.b.transcode(context)) }
+}
+
+class UShiftR implements Expression {
+    constructor(private readonly a: Expression, private readonly b: Expression) { }
+    transcode(context) { return c.i32.shr_u(this.a.transcode(context), this.b.transcode(context)) }
 }
 
 export class Constant implements Expression {
@@ -352,6 +371,8 @@ const _jlt = c.i32.lt_s.bind(c.i32)
 
 const _jgt = c.i32.gt_s.bind(c.i32)
 
+const _jle = c.i32.le_s.bind(c.i32)
+
 export const g = {
     const_(v: uint32): Constant { return new Constant(v) },
 
@@ -389,6 +410,14 @@ export const g = {
 
     mul(a: Expression, b: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(new Mul(a, b), x) },
 
+    div(a: Expression, b: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(new Div(a, b), x) },
+
+    neg(a: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(new Neg(a), x) },
+
+    bitand(a: Expression, b: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(new BitAnd(a, b), x) },
+
+    ushiftr(a: Expression, b: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(new UShiftR(a, b), x) },
+
     copy(a: Expression, x: StoreOperandType): Opcode { return new BasicOpcode(a, x) },
 
     return_(v: Expression): Opcode { return new Return(v) },
@@ -421,6 +450,8 @@ export const g = {
 
     streamstr(addr: Expression): Opcode { return new StreamStr(addr) },
 
+    streamunichar(n: Expression): Opcode { return new VmLibCall(vmlib_call.streamunichar, [n], null) },
+
     setiosys(sys: Expression, rock: Expression): Opcode { return new VmLibCall(vmlib_call.setiosys, [sys, rock], null) },
 
     getmemsize(out: StoreOperandType): Opcode { return new BasicOpcode(new NativeExpression(GETENDMEM), out) },
@@ -429,6 +460,10 @@ export const g = {
 
     jz(condition: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jz, [condition], vector)
+    },
+
+    jnz(condition: Expression, vector: Expression): Opcode {
+        return new ConditionalJump(_jne, [condition, new NativeExpression(zero)], vector)
     },
 
     jeq(a: Expression, b: Expression, vector: Expression): Opcode {
@@ -453,6 +488,9 @@ export const g = {
 
     jgt(a: Expression, b: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jgt, [a, b], vector)
+    },
+    jle(a: Expression, b: Expression, vector: Expression): Opcode {
+        return new ConditionalJump(_jle, [a, b], vector)
     },
 
     aload(a: Expression, i: Expression, out: StoreOperandType): Opcode {

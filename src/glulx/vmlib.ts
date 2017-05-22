@@ -14,6 +14,9 @@ import { uint32 } from '../basic-types'
 import { GlkSelector } from './host'
 
 export const types = {
+    in7: c.func_type([c.i32, c.i32, c.i32, c.i32, c.i32, c.i32, c.i32], c.i32),
+    in6: c.func_type([c.i32, c.i32, c.i32, c.i32, c.i32, c.i32], c.i32),
+    in5: c.func_type([c.i32, c.i32, c.i32, c.i32, c.i32], c.i32),
     in_in_in_out: c.func_type([c.i32, c.i32, c.i32], c.i32),
     in_in_out: c.func_type([c.i32, c.i32], c.i32),
     in_out: c.func_type([c.i32], c.i32),
@@ -22,7 +25,7 @@ export const types = {
     lookup: (type: FuncType) => all_types_indexes[all_types.findIndex(f => f == type)]
 }
 
-const all_types = [types.in_out, types.out, types.in, types.in_in_out, types.in_in_in_out]
+const all_types = [types.in_out, types.out, types.in, types.in_in_out, types.in_in_in_out, types.in7, types.in6, types.in5]
 const all_types_indexes = all_types.map((x, i) => c.varuint32(i))
 
 export const type_section = c.type_section(all_types)
@@ -270,6 +273,9 @@ export const vmlib_call = {
 
     streamchar,
     streamnum,
+
+    // TODO
+    streamunichar: streamchar,
 
     stream_buffer: function (offset: Op<I32>, length: Op<I32>) { return c.drop(c.void, vmlib_function_call(5, [offset, length])) },
 

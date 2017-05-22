@@ -240,12 +240,27 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x12: // mul
             sig = decodeFunctionSignature_in_in_out(image, offset)
             return new ParseResult(g.mul(sig.a, sig.b, sig.x), sig.nextOffset)
+        case 0x13: // div
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(g.div(sig.a, sig.b, sig.x), sig.nextOffset)
+        case 0x15: // neg
+            sig = decodeFunctionSignature_in_out(image, offset)
+            return new ParseResult(g.neg(sig.a, sig.out), sig.nextOffset)
+        case 0x18: // bitand
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(g.bitand(sig.a, sig.b, sig.x), sig.nextOffset)
+        case 0x1e: // ushiftr
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(g.ushiftr(sig.a, sig.b, sig.x), sig.nextOffset)
         case 0x20:  // jump
             sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.jump(sig.a), sig.nextOffset)
         case 0x22:  // jz
             sig = decodeFunctionSignature_in_in(image, offset)
             return new ParseResult(g.jz(sig.a, sig.b), sig.nextOffset)
+        case 0x23:  // jnz
+            sig = decodeFunctionSignature_in_in(image, offset)
+            return new ParseResult(g.jnz(sig.a, sig.b), sig.nextOffset)
         case 0x24:  // jeq
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jeq(sig.a, sig.b, sig.c), sig.nextOffset)
@@ -261,6 +276,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x28: // jgt
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jgt(sig.a, sig.b, sig.c), sig.nextOffset)
+        case 0x29: // jle
+            sig = decodeFunctionSignature_in_in_in(image, offset)
+            return new ParseResult(g.jle(sig.a, sig.b, sig.c), sig.nextOffset)
         case 0x2b: // jgeu
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jgeu(sig.a, sig.b, sig.c), sig.nextOffset)
@@ -285,6 +303,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x72: // streamstr
             sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.streamstr(sig.a), sig.nextOffset)
+        case 0x73: // streamunichar
+            sig = decodeFunctionSignature_in(image, offset)
+            return new ParseResult(g.streamunichar(sig.a), sig.nextOffset)
         case 0x102: // getmemsize
             sig = decodeFunctionSignature_out(image, offset)
             return new ParseResult(g.getmemsize(sig.out), sig.nextOffset)
@@ -312,7 +333,8 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
     }
 }
 
-// decodes a sequence of opcodes until either a Return or Jump is reached
+// decodes a sequence of opcodes until either a Return or backwards Jump is reached
+// (forward jumps are followed)
 // or the endOffset is reached
 function decodeOpcodes(image: Uint8Array, offset: number, endOffset: number): ParseResult<Opcode[]> {
     let opcodes: Opcode[] = []
@@ -325,7 +347,15 @@ function decodeOpcodes(image: Uint8Array, offset: number, endOffset: number): Pa
             break
         }
         if (opcode.v instanceof Jump) {
-            break
+            // follow forward jumps
+            let target = opcode.v.getConstantJumpTarget(offset)
+            if (target >= offset) {
+                // remove the jump
+                opcodes.pop()
+                offset = target
+            } else {
+                break
+            }
         }
     }
     return new ParseResult(opcodes, offset);
@@ -365,6 +395,9 @@ export function decodeFunction(image: Uint8Array, offset: number, name?: string)
                     case 1: ftype = types.in_out; break;
                     case 2: ftype = types.in_in_out; break;
                     case 3: ftype = types.in_in_in_out; break;
+                    case 5: ftype = types.in5; break;
+                    case 6: ftype = types.in6; break;
+                    case 7: ftype = types.in7; break;
                     default: throw new Error("unsupported number of arguments: " + argCount)
                 }
 
@@ -452,6 +485,7 @@ function fixupConditionalJumps(image: Uint8Array, block: ParseResult<Opcode[]>, 
                             block.v[indexOfJump] = new IfThenElse(condJump, thenBlock.v, [])
                         }
                     } else {
+                        console.error("thenBlock did not end in Return", lastOp, thenBlock, condJump)
                         throw new Error("thenBlock did not end in Return")
                     }
                 }
