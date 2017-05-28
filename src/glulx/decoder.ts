@@ -169,6 +169,33 @@ function decodeFunctionSignature_in_in_in_in_out(image: Uint8Array, offset: numb
     }
 }
 
+function decodeFunctionSignature_in7_out(image: Uint8Array, offset: number) {
+    const sig1 = image[offset]
+    const sig2 = image[offset + 1]
+    const sig3 = image[offset + 2]
+    const sig4 = image[offset + 3]
+    let a = decodeLoadOperand(0x0F & sig1, image, offset + 4)
+    let b = decodeLoadOperand(sig1 >>> 4, image, a.nextOffset)
+    let c = decodeLoadOperand(0x0F & sig2, image, b.nextOffset)
+    let d = decodeLoadOperand(sig2 >>> 4, image, c.nextOffset)
+    let e = decodeLoadOperand(0x0F & sig3, image, d.nextOffset)
+    let f = decodeLoadOperand(sig3 >>> 4, image, e.nextOffset)
+    let g = decodeLoadOperand(0x0F & sig4, image, f.nextOffset)
+    let x = decodeStoreOperand(sig4 >>> 4, image, g.nextOffset)
+    return {
+        a: a.v,
+        b: b.v,
+        c: c.v,
+        d: d.v,
+        e: e.v,
+        f: f.v,
+        g: g.v,
+        x: x.v,
+        nextOffset: x.nextOffset
+    }
+}
+
+
 function decodeFunctionSignature_in(image: Uint8Array, offset: number) {
     const sig = image[offset]
     let a = decodeLoadOperand(0x0F & sig, image, offset + 1)
@@ -282,6 +309,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x2b: // jgeu
             sig = decodeFunctionSignature_in_in_in(image, offset)
             return new ParseResult(g.jgeu(sig.a, sig.b, sig.c), sig.nextOffset)
+        case 0x2d: // jleu
+            sig = decodeFunctionSignature_in_in_in(image, offset)
+            return new ParseResult(g.jleu(sig.a, sig.b, sig.c), sig.nextOffset)
         case 0x31:  // return
             sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.return_(sig.a), sig.nextOffset)
@@ -291,6 +321,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x48: // aload
             sig = decodeFunctionSignature_in_in_out(image, offset)
             return new ParseResult(g.aload(sig.a, sig.b, sig.x), sig.nextOffset)
+        case 0x49: // aloads
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(g.aloads(sig.a, sig.b, sig.x), sig.nextOffset)
         case 0x4a: // aloadb
             sig = decodeFunctionSignature_in_in_out(image, offset)
             return new ParseResult(g.aloadb(sig.a, sig.b, sig.x), sig.nextOffset)
@@ -318,6 +351,10 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x149: // setiosys
             sig = decodeFunctionSignature_in_in(image, offset)
             return new ParseResult(g.setiosys(sig.a, sig.b), sig.nextOffset)
+        case 0x151: // binarysearch
+            sig = decodeFunctionSignature_in7_out(image, offset)
+            // TODO
+            return new ParseResult(g.trap("binarysearch is not yet implemented"), sig.nextOffset)
         case 0x160: // callf
             sig = decodeFunctionSignature_in_out(image, offset)
             return new ParseResult(g.callf(sig.a, [], sig.out), sig.nextOffset)

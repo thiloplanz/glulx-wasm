@@ -351,6 +351,11 @@ class ReadUInt8 implements Expression {
     transcode(context: TranscodingContext) { return vmlib_call.read_uint8(this.addr.transcode(context)) }
 }
 
+class ReadUInt16 implements Expression {
+    constructor(private readonly addr: Expression) { }
+    transcode(context: TranscodingContext) { return vmlib_call.read_uint16(this.addr.transcode(context)) }
+}
+
 class ReadUInt32 implements Expression {
     constructor(private readonly addr: Expression) { }
     transcode(context: TranscodingContext) { return vmlib_call.read_uint32(this.addr.transcode(context)) }
@@ -371,6 +376,8 @@ const _jne = c.i32.ne.bind(c.i32)
 const _jge = c.i32.ge_s.bind(c.i32)
 
 const _jgeu = c.i32.ge_u.bind(c.i32)
+
+const _jleu = c.i32.le_u.bind(c.i32)
 
 const _jlt = c.i32.lt_s.bind(c.i32)
 
@@ -491,6 +498,10 @@ export const g = {
         return new ConditionalJump(_jgeu, [a, b], vector)
     },
 
+    jleu(a: Expression, b: Expression, vector: Expression): Opcode {
+        return new ConditionalJump(_jleu, [a, b], vector)
+    },
+
     jlt(a: Expression, b: Expression, vector: Expression): Opcode {
         return new ConditionalJump(_jlt, [a, b], vector)
     },
@@ -506,6 +517,10 @@ export const g = {
         const indx = new Mul(i, new Constant(4))
         const addr = new Add(a, indx)
         return new BasicOpcode(new ReadUInt32(addr), out)
+    },
+
+    aloads(a: Expression, i: Expression, out: StoreOperandType): Opcode {
+        return new BasicOpcode(new ReadUInt8(new Add(a, new Add(i, i))), out)
     },
 
     aloadb(a: Expression, i: Expression, out: StoreOperandType): Opcode {
@@ -525,5 +540,10 @@ export const g = {
 
     function_i32_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
         return new GlulxFunction(address, name, types.in_in_out, false, 2, opcodes)
+    },
+
+    trap(message: string): Opcode {
+        console.error(message)
+        return new BasicOpcode(eins, discard)
     }
 }

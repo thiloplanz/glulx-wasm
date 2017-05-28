@@ -214,7 +214,18 @@ const lib = [
             arg0 // dummy return, because "void" does not work yet
         ]
     )
-    ]
+    ],
+    // 7: short load from memory (two bytes)
+    [types.in_out, c.function_body([], function () {
+        // need to convert between big-endian (Glulx) and little-endian (wasm)
+        const a1 = c.i32.load8_u(c.align8, arg0)
+        const a0 = c.i32.load8_u(c.align8, c.i32.add(arg0, one))
+
+        return [
+            guard_endmem(arg0, c.i32.add(c.i32.shl(a1, eightBits), a0))
+        ]
+    }())],
+
 ]
 
 
@@ -284,6 +295,8 @@ export const vmlib_call = {
     },
 
     read_uint8: function (addr: Op<I32>): Op<I32> { return guard_endmem(addr, c.i32.load8_u(c.align8, addr)) },
+    read_uint16: function (addr: Op<I32>): Op<I32> { return vmlib_function_call(7, [addr]) },
+
 
     trap: function (message: string) {
         // TODO: build a string table into the image to be able to show error at runtime
