@@ -294,6 +294,9 @@ export function decodeOpcode(image: Uint8Array, offset: number): ParseResult<Opc
         case 0x4a: // aloadb
             sig = decodeFunctionSignature_in_in_out(image, offset)
             return new ParseResult(g.aloadb(sig.a, sig.b, sig.x), sig.nextOffset)
+        case 0x4b: // aloadbit
+            sig = decodeFunctionSignature_in_in_out(image, offset)
+            return new ParseResult(g.aloadbit(sig.a, sig.b, sig.x), sig.nextOffset)
         case 0x70: // streamchar
             sig = decodeFunctionSignature_in(image, offset)
             return new ParseResult(g.streamchar(sig.a), sig.nextOffset)

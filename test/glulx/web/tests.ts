@@ -75,6 +75,17 @@ const cases: any[] = [
         0, 0x42004200,  // big endian
     ],
     [
+        g.function_i32_i32(addr++, "aloadbit", [
+            g.aloadbit(g.const_(0), var0, g.setLocalVariable(0)),
+            g.return_(var0)
+        ]),
+        0, 1,
+        1, 0,
+        16, 0,
+        17, 1,
+        81, 1
+    ],
+    [
         g.function_i32_i32(addr++, "write to RAM", [
             g.copy(var0, g.storeToMemory(ramStart)),
             g.return_(g.memory(ramStart))
@@ -190,11 +201,15 @@ function runCase(test: Test, name: string, data: any[]) {
             if (!input.slice) input = [input]
             let expected = data[i + 1]
             ClearOutputBuffer()
-            let result = func.apply(null, input)
-            if (expected.call) {
-                expected.call(null, test, result)
-            } else {
-                test.equals(result, expected, input + " -> " + expected + ", got " + result)
+            try {
+                let result = func.apply(null, input)
+                if (expected.call) {
+                    expected.call(null, test, result)
+                } else {
+                    test.equals(result, expected, input + " -> " + expected + ", got " + result)
+                }
+            } catch (e) {
+                test.ifError(e)
             }
         }
         test.done()

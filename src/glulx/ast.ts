@@ -257,6 +257,11 @@ class Div implements Expression {
     transcode(context) { return c.i32.div_s(this.a.transcode(context), this.b.transcode(context)) }
 }
 
+class Mod implements Expression {
+    constructor(private readonly a: Expression, private readonly b: Expression) { }
+    transcode(context) { return c.i32.rem_s(this.a.transcode(context), this.b.transcode(context)) }
+}
+
 class Neg implements Expression {
     constructor(private readonly a: Expression) { }
     transcode(context) { return c.i32.sub(zero, this.a.transcode(context)) }
@@ -372,6 +377,10 @@ const _jlt = c.i32.lt_s.bind(c.i32)
 const _jgt = c.i32.gt_s.bind(c.i32)
 
 const _jle = c.i32.le_s.bind(c.i32)
+
+const eins = new Constant(1)
+
+const acht = new Constant(8)
 
 export const g = {
     const_(v: uint32): Constant { return new Constant(v) },
@@ -501,6 +510,13 @@ export const g = {
 
     aloadb(a: Expression, i: Expression, out: StoreOperandType): Opcode {
         return new BasicOpcode(new ReadUInt8(new Add(a, i)), out)
+    },
+
+    aloadbit(a: Expression, i: Expression, out: StoreOperandType): Opcode {
+        let byteOffset = new Add(a, new Div(i, acht))
+        let bitIndex = new Mod(i, acht)
+        let readByte = new ReadUInt8(byteOffset)
+        return new BasicOpcode(new BitAnd(eins, new UShiftR(readByte, bitIndex)), out)
     },
 
     function_i32_i32(address: uint32, name: string, opcodes: Opcode[]): GlulxFunction {
