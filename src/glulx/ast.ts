@@ -16,6 +16,7 @@ import { StreamStr } from './strings'
 export interface TranscodingContext {
     callableFunctions: VarUint32[],
     stackCalledFunctions: boolean[],
+    functionLocalsCounts: number[],
     image: Uint8Array,
     ramStart: uint32,
     endMem: uint32,
@@ -109,7 +110,6 @@ class Callf implements Opcode {
                 return c.unreachable
             }
             if (context.stackCalledFunctions[address.v]) {
-                console.info(index, context.currentFunctionLocalsCount)
                 return c.void_block(
                     // push args in reverse order
                     args.slice().reverse().map(x => vmlib_call.push(x.transcode(context)))
@@ -124,6 +124,15 @@ class Callf implements Opcode {
                         c.set_global(STACK_POINTER, c.i32.wrap_i64(c.get_local(c.i64, context.currentFunctionLocalsCount + 0)))
                         )
                 )
+            }
+            const localsCount = context.functionLocalsCounts[address.v]
+            if (localsCount < args.length) {
+                console.error(`too many arguments to callf to ${address.v} (wants ${localsCount})`, args)
+                return c.unreachable
+            }
+            while (args.length < localsCount) {
+                // all other locals are set to zero
+                args.push(zero_expression)
             }
             return c.void_block([
                 // set called_frame_pointer
@@ -172,6 +181,8 @@ const one = c.i32.const(1)
 const two = c.i32.const(2)
 const return_zero = c.return_(zero)
 const return_one = c.return_(one)
+
+const zero_expression = new NativeExpression(zero)
 
 // the special cases (0,1 = return, 2 = nop) for jump instructions
 const jump_vectors = [c.varuint32(0), c.varuint32(1), c.varuint32(3)]
